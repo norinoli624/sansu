@@ -1,0 +1,2331 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>算数プリント自動作成システム v12</title>
+    <style>
+        /* 画面表示用のスタイル */
+        body { font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', sans-serif; margin: 30px; color: #333; line-height: 1.6; background-color: #f5f7fa; }
+        h2 { border-bottom: 2px solid #005bac; padding-bottom: 8px; color: #005bac; margin-top: 0; }
+        .config-table { width: 100%; max-width: 800px; border-collapse: collapse; margin-bottom: 25px; background: white; box-shadow: 0 2px 5px rgba(0,0,0,0.05); border-radius: 8px; overflow: hidden; }
+        .config-table td { padding: 15px; border: 1px solid #e2e8f0; }
+        .config-table td.label-cell { background: #edf2f7; font-weight: bold; width: 180px; color: #4a5568; }
+        select, input[type="number"] { padding: 8px; font-size: 14px; border: 1px solid #cbd5e0; border-radius: 4px; background: white; }
+        .unit-container { display: flex; flex-wrap: wrap; gap: 10px; }
+        .unit-item { background: #ebf8ff; padding: 6px 14px; border-radius: 20px; font-size: 14px; cursor: pointer; border: 1px solid #bee3f8; display: flex; align-items: center; color: #2b6cb0; }
+        .unit-item input { margin-right: 6px; }
+        .btn-submit { background: #ed8936; color: white; border: none; padding: 14px 35px; font-size: 16px; font-weight: bold; border-radius: 4px; cursor: pointer; transition: 0.2s; box-shadow: 0 4px 0 #dd6b20; }
+        .btn-submit:hover { background: #dd6b20; transform: translateY(1px); box-shadow: 0 3px 0 #dd6b20; }
+        
+        #preview-area { margin-top: 40px; padding-top: 20px; border-top: 2px dashed #cbd5e0; }
+        
+        /* プリント表示エリア（余白を15mmにして縦幅に余裕を持たせる） */
+        .print-page { width: 210mm; height: 296mm; padding: 15mm 12mm; box-sizing: border-box; background: white; margin: 0 auto 20px auto; box-shadow: 0 0 10px rgba(0,0,0,0.1); font-family: 'Hiragino Mincho ProN', 'MS Mincho', serif; position: relative; page-break-after: always; }
+        .title { font-size: 26px; font-weight: bold; text-align: center; margin-bottom: 20px; letter-spacing: 2px; }
+        .header-table { width: 100%; border-collapse: collapse; margin-bottom: 35px; }
+        .header-table td { border: 2px solid #000; padding: 10px; font-size: 16px; }
+        
+        /* 問題数に応じてJavascript側でgapや高さを最適化するためのベース */
+        /* 【修正】数式全体のサイズを20pxから24pxに大きくします */
+        .question-list { 
+            display: grid; 
+            grid-template-columns: 1fr 1fr; 
+            font-size: 22px; 
+            padding-left: 5px; 
+        }
+
+        .q-item { display: flex; align-items: center; white-space: nowrap; }
+
+        /* 解答ページ用のスタイル */
+        .ans-page { border: 4px double #cc0000 !important; }
+        .ans-title { color: #cc0000; font-size: 26px; font-weight: bold; text-align: center; margin-bottom: 25px; letter-spacing: 2px; }
+        .ans-item { color: #cc0000; font-weight: bold; }
+
+         /* 縦並び分数用のスタイル */
+        /* 【修正】縦並び分数のサイズとバランスを最適化 */
+        .fraction {
+            display: inline-flex;
+            flex-direction: column;
+            vertical-align: middle;
+            text-align: center;
+            font-size: 0.85em; /* 縮小率をマイルドにして数字を大きく（24px×0.85≒20px相当） */
+            line-height: 1.0;  /* 上下の隙間を少し詰めてスマートに */
+            padding: 0 6px;    /* 左右の余白を広げて見やすく */
+            position: relative;
+            top: -1px;         /* ＋や＝との中心線をジャストに調整 */
+        }
+        .numerator {
+            border-bottom: 2px solid currentColor; /* 横棒を少し太くしてクッキリ見せます */
+            padding-bottom: 2px;
+        }
+        .denominator {
+            padding-top: 2px;
+        }
+        /* 帯分数の整数部分 */
+        .fraction-whole {
+            font-size: 1.1em; /* 整数部をさらに一回り大きく */
+            vertical-align: middle;
+            margin-right: 2px;
+        }
+
+        /* 🖨️ 印刷・PDF出力時の設定 */
+        @media print {
+            @page { size: A4 portrait; margin: 0; }
+            body { margin: 0; background: white; }
+            h2, .config-table, .btn-submit { display: none !important; }
+            #preview-area { margin-top: 0; padding-top: 0; border-top: none; }
+            .print-page { box-shadow: none; margin: 0; width: 210mm; height: 297mm; page-break-after: always; page-break-inside: avoid; }
+        }
+    </style>
+</head>
+<body>
+
+    <h2>📊 算数プリント自動生成（問題数可変対応版）</h2>
+    
+    <table class="config-table">
+        <tr>
+            <td class="label-cell">① 学年を選択</td>
+            <td>
+                <select id="grade-select" onchange="updateUnits()">
+                    <option value="1">小学1年生</option>
+                    <option value="2">小学2年生</option>
+                    <option value="3">小学3年生</option>
+                    <option value="4">小学4年生</option>
+                    <option value="5">小学5年生</option>
+                    <option value="6">小学6年生</option>
+                </select>
+            </td>
+        </tr>
+        <tr>
+            <td class="label-cell">② 単元（複数選択可）</td>
+            <td>
+                <div id="unit-list" class="unit-container"></div>
+            </td>
+        </tr>
+        <tr>
+            <td class="label-cell">③ 難易度（レベル）</td>
+            <td>
+                <select id="level-select" onchange="updateLevelOptions()">
+                    <option value="1">レベル1（基礎・まずは習熟）</option>
+                    <option value="2">レベル2（応用・次に解けるべき）</option>
+                    <option value="3">レベル3（発展・高水準・要工夫）</option>
+                    <option value="4">レベル4（中学受験・実践制限時間）</option>
+                </select>
+            </td>
+        </tr>
+        <tr>
+            <td class="label-cell">④ 問題数の調整</td>
+            <td>
+                <select id="question-count-select" onchange="validateQuestionCount()">
+                    <option value="10">10問（1問10点）</option>
+                    <option value="12">12問（1問割り切れず・総合点表示）</option>
+                    <option value="14">14問</option>
+                    <option value="16">16問</option>
+                    <option value="18">18問</option>
+                    <option value="20">20問（1問5点）</option>
+                </select>
+            </td>
+        </tr>
+        <tr>
+            <td class="label-cell">⑤ 出力ページ数</td>
+            <td>
+                <input type="number" id="page-count" value="1" min="1" max="10"> ページ（最大10枚）
+            </td>
+        </tr>
+    </table>
+
+    <button class="btn-submit" onclick="generateAndPrint()">📄 ボタン1つでPDF・印刷出力</button>
+
+    <div id="preview-area"></div>
+
+    <script>
+        const curriculumData = {
+            1: ["1桁のたし算・ひき算", "くり上がりのあるたし算", "くり下がりのあるひき算", "3つの数の計算", "100へのアプローチ・何十の計算"], // 新設
+            2: ["2桁のたし算（筆算）", "2桁のひき算（筆算）", "かけ算九九", "簡単な3桁の計算"],
+            3: ["3桁・4桁の筆算", "かけ算の筆算", "わり算（あまりなし・あり）", "小数の加法と減法", "簡単な分数の加法と減法", "あまりのあるわり算のたしかめ（検算）"], // 新設
+            4: ["わり算の筆算", "小数のたし算・ひき算", "整数の四則混合計算", "同分母の分数計算", "四則計算の結果の見積もり", "計算のきまり（工夫して計算）", "小数の乗除筆算（小数×整数・小数÷整数）"], // わり算の筆算へ変更 + 新設2つ
+            5: ["小数のかけ算", "小数のわり算", "異分母の通分・分数計算", "公倍数・公約数の暗算", "小数と分数のまじった計算（基礎）", "単位の換算と計算"], // 新設2つ
+            6: ["分数のかけ算", "分数のわり算", "分数と小数の混合計算", "複雑な四則混合計算", "比例の関係と代入計算"] // 新設
+        };
+
+
+        function updateUnits() {
+            const grade = document.getElementById("grade-select").value;
+            const unitListDiv = document.getElementById("unit-list");
+            unitListDiv.innerHTML = ""; 
+            curriculumData[grade].forEach((unit, index) => {
+                const label = document.createElement("label");
+                label.className = "unit-item";
+                const checked = index === 0 ? "checked" : "";
+                // 【修正1】チェックボックスがクリックされた時、問題数だけでなくレベル文言（updateLevelOptions）も連動して更新させます
+                label.innerHTML = `<input type="checkbox" name="unit-choice" value="${unit}" ${checked} onchange="validateQuestionCount(); updateLevelOptions();"> ${unit}`;
+                unitListDiv.appendChild(label);
+            });
+            // 【修正2】単元リストが新しく生成された直後、現在の選択状態（デフォルトは一番最初の単元）に合わせたレベル文言に書き換えます
+            updateLevelOptions();
+    
+            // 単元リストが更新された直後にも、問題数プルダウンのチェックを走らせる
+            validateQuestionCount();
+        }
+
+
+        function updateLevelOptions() {
+            const grade = document.getElementById("grade-select").value;
+            const levelSelect = document.getElementById("level-select");
+            const currentSelectedValue = levelSelect.value; // 現在選ばれているレベル(1~4)を保持
+        
+            // チェックされている単元のリストを取得
+            const checkedBoxes = document.querySelectorAll('input[name="unit-choice"]:checked');
+            
+            // デフォルト・および複数単元選択（ミックス）時の共通シンプル表記
+            let labels = {
+                1: "レベル1（基礎・まずは習熟）",
+                2: "レベル2（応用・次に解けるべき）",
+                3: "レベル3（発展・高水準・要工夫）",
+                4: "レベル4（中学受験・実践制限時間）"
+            };
+        
+            // 【バグ修正】checkedBoxes[0].value とすることで、1つだけ選択されている単元名を正しく取得
+            if (checkedBoxes.length === 1) {
+                const unit = checkedBoxes[0].value; 
+        
+                // ==========================================
+                // 小学1年生のレベル文言定義（1つの単元のみ選択時）
+                // ==========================================
+                if (grade === "1") {
+                    if (unit.includes("1桁のたし算・ひき算")) {
+                        labels = {
+                            1: "レベル1（基礎：1桁の加減・答え9以内）",
+                            2: "レベル2（応用：0が絡む加減算）",
+                            3: "レベル3（発展：□を求める虫食い算）",
+                            4: "レベル4（最高峰：3つの数の加減混合）"
+                        };
+                    } else if (unit.includes("くり上がりのあるたし算")) {
+                        labels = {
+                            1: "レベル1（基礎：一般的なくり上がり）",
+                            2: "レベル2（応用：わるい順・前後入れ替え）",
+                            3: "レベル3（発展：□を求める虫食いたし算）",
+                            4: "レベル4（最高峰：3つの数の加減混合）"
+                        };
+                    } else if (unit.includes("くり下がりのあるひき算")) {
+                        labels = {
+                            1: "レベル1（基礎：一般的なくり下がり）",
+                            2: "レベル2（応用：11－2等の特殊パターン）",
+                            3: "レベル3（発展：□を求める虫食いひき算）",
+                            4: "レベル4（最高峰：100台からの減算筆算）"
+                        };
+                    } else if (unit.includes("3つの数の計算")) {
+                        labels = {
+                            1: "レベル1（基礎：3つの数の同符号加減）",
+                            2: "レベル2（応用：3つの数の加減混合）",
+                            3: "レベル3（発展：□を求める3つの数虫食い）",
+                            4: "レベル4（最高峰：4つの数の超複雑加減混合）"
+                        };
+                    }else if (unit.includes("100へのアプローチ・何十の計算")) {
+                        labels = {
+                            1: "レベル1（基礎：100への単一加減算）",
+                            2: "レベル2（応用：何十同士の100の補数）",
+                            3: "レベル3（発展：2桁と2桁の100への補数）",
+                            4: "レベル4（最高峰：3つの数を含む100への計算）"
+                        };
+                    }
+                }
+        
+                // ==========================================
+                // 小学2年生のレベル文言定義（1つの単元のみ選択時）
+                // ==========================================
+                else if (grade === "2") {
+                    if (unit.includes("2桁のたし算")) {
+                        labels = {
+                            1: "レベル1（基礎：繰り上がりなし筆算）",
+                            2: "レベル2（応用：繰り上がりあり筆算）",
+                            3: "レベル3（発展：2桁の虫食い算）",
+                            4: "レベル4（最高峰：3つの2桁の連続加算）"
+                        };
+                    } else if (unit.includes("2桁のひき算")) {
+                        labels = {
+                            1: "レベル1（基礎：繰り下がりなし筆算）",
+                            2: "レベル2（応用：繰り下がりあり筆算）",
+                            3: "レベル3（発展：2桁の虫食い減算）",
+                            4: "レベル4（最高峰：100台からの繰り下がり・0またぎ確定）" // 0またぎ強化を明記
+                        };
+                    } else if (unit.includes("かけ算九九")) {
+                        labels = {
+                            1: "レベル1（基礎：2, 3, 4, 5の段）",
+                            2: "レベル2（応用：6, 7, 8, 9の段）",
+                            3: "レベル3（発展：かけ算の虫食い□・1の段カット）", // 1の段カットを明記
+                            4: "レベル4（最高峰：10〜14の段・九九の拡張）"
+                        };
+                    } else if (unit.includes("簡単な3桁の計算")) {
+                        labels = {
+                            1: "レベル1（基礎：何百の計算 300+400など）",
+                            2: "レベル2（応用：3桁±1桁・2桁のマイルド計算）",
+                            3: "レベル3（発展：3桁の足し算虫食い□）",
+                            4: "レベル4（最高峰：3桁と九九の四則混合）"
+                        };
+                    }
+                }
+        
+                // ==========================================
+                // 小学3年生のレベル文言定義（1つの単元のみ選択時）
+                // ==========================================
+                else if (grade === "3") {
+                    if (unit.includes("3桁・4桁の筆算")) {
+                        labels = {
+                            1: "レベル1（基礎：3桁±3桁・マイルド計算）",
+                            2: "レベル2（応用：4桁±4桁・連続繰り上がり）",
+                            3: "レベル3（発展：3桁の足し引き虫食い□）",
+                            4: "レベル4（最高峰：【1行化】3〜4桁の3数加減混合）"
+                        };
+                    } else if (unit.includes("かけ算の筆算")) {
+                        labels = {
+                            1: "レベル1（基礎：2桁×1桁・繰り上がりあり）",
+                            2: "レベル2（応用：2桁×2桁の一般的な筆算）",
+                            3: "レベル3（発展：何十をかける計算・虫食い）",
+                            4: "レベル4（最高峰：3桁×2桁の上限発展）"
+                        };
+                    } else if (unit.includes("わり算")) {
+                        labels = {
+                            1: "レベル1（基礎：あまりなし・九九の逆算）",
+                            2: "レベル2（応用：あまりあり・九九の範囲内）",
+                            3: "レベル3（発展：わられる数を求める虫食い）",
+                            4: "レベル4（最高峰：2桁÷1桁・商が2桁の加減混合）"
+                        };
+                    } else if (unit.includes("小数の加法と減法")) {
+                        labels = {
+                            1: "レベル1（基礎：小数第一位・繰り下がりなし）",
+                            2: "レベル2（応用：小数第一位・繰り上がり下がり）",
+                            3: "レベル3（発展：小数の足し算虫食い□）",
+                            4: "レベル4（最高峰：整数と小数の混ざった計算）"
+                        };
+                    } else if (unit.includes("簡単な分数の加法と減法")) {
+                        labels = {
+                            1: "レベル1（基礎：同分母の足し引き・答え1未満）",
+                            2: "レベル2（応用：答えが1になる・1から引く）",
+                            3: "レベル3（発展：分数の足し算虫食い□）",
+                            4: "レベル4（最高峰：3つの同分母分数の加減混合）"
+                        };
+                    } else if (unit.includes("あまりのあるわり算のたしかめ（検算）")) { // 新設
+                        labels = {
+                            1: "レベル1（基礎：九九の範囲での基本のたしかめ式）",
+                            2: "レベル2（応用：割られる数が2桁後半のたしかめ式）",
+                            3: "レベル3（発展：たしかめ算の式自体を求める虫食い）",
+                            4: "レベル4（最高峰：割られる数が3桁の検算式）"
+                        };
+                    }
+                }
+        
+                // ==========================================
+                // 小学4年生のレベル文言定義（1つの単元のみ選択時）
+                // ==========================================
+                else if (grade === "4") {
+                    if (unit.includes("わり算の筆算")) {
+                        labels = {
+                            1: "レベル1（基礎：3桁÷1桁の筆算）",
+                            2: "レベル2（応用：3桁÷2桁の一般的な筆算）",
+                            3: "レベル3（発展：わられる数を求める3桁÷2桁）",
+                            4: "レベル4（最高峰：4桁÷2桁・商が3桁の筆算）"
+                        };
+                    } else if (unit.includes("小数のたし算・ひき算")) {
+                        labels = {
+                            1: "レベル1（基礎：小数第二位までの加減）",
+                            2: "レベル2（応用：桁数の違う小数の筆算）",
+                            3: "レベル3（発展：□を使った小数計算虫食い）",
+                            4: "レベル4（最高峰：【1行化】3つの小数の加減混合）"
+                        };
+                    } else if (unit.includes("整数の四則混合計算")) {
+                        labels = {
+                            1: "レベル1（基礎：カッコなし・3数のかけ算優先）",
+                            2: "レベル2（応用：カッコのある3数の計算）",
+                            3: "レベル3（発展：逆算の基礎・□を使った混合）",
+                            4: "レベル4（最高峰：【1列化】複雑4パターンランダム）"
+                        };
+                    } else if (unit.includes("同分母の分数計算")) {
+                        labels = {
+                            1: "レベル1（基礎：仮分数・帯分数化しない表記）",
+                            2: "レベル2（応用：帯分数のくり上がり・下がり）",
+                            3: "レベル3（発展：□に入る分数の虫食い算）",
+                            4: "レベル4（最高峰：整数から帯分数を引く計算）"
+                        };
+                    } else if (unit.includes("見積もり")) {
+                        labels = {
+                            1: "レベル1（基礎：百の位までの概数計算）",
+                            2: "レベル2（応用：上から1桁の概数計算・積）",
+                            3: "レベル3（発展：概数の仕組みを問う虫食い見積もり）",
+                            4: "レベル4（最高峰：【1列化】万の位までの概数計算）"
+                        };
+                    } else if (unit.includes("計算のきまり（工夫して計算）")) { // 新設
+                        labels = {
+                            1: "レベル1（基礎：交換・結合法則の活用・キリの良い数）",
+                            2: "レベル2（応用：分配法則の基礎・□×(○＋△)）",
+                            3: "レベル3（発展：分配法則の逆算・○×△＋○×□）",
+                            4: "レベル4（最高峰：101や99を掛け算に変形する工夫）"
+                        };
+                    } else if (unit.includes("小数の乗除筆算（小数×整数・小数÷整数）")) { // 新設
+                        labels = {
+                            1: "レベル1（基礎：1桁の小数 × 1桁の整数）",
+                            2: "レベル2（応用：2桁の小数 × 1桁の整数・筆算）",
+                            3: "レベル3（発展：小数 ÷ 1桁の整数・割り切れる）",
+                            4: "レベル4（最高峰：【1列化】小数 ÷ 2桁の整数・あまりあり）" // 1列縦並びを意識したラベリング
+                        };
+                    }
+                }
+        
+                // ==========================================
+                // 小学5年生のレベル文言定義（1つの単元のみ選択時）
+                // ==========================================
+                else if (grade === "5") {
+                    if (unit.includes("小数のかけ算")) {
+                        labels = {
+                            1: "レベル1（基礎：2桁の整数×1桁の小数）",
+                            2: "レベル2（応用：1桁の小数×1桁の小数）",
+                            3: "レベル3（発展：2桁の整数×2桁の小数）",
+                            4: "レベル4（最高峰：【1行化】工夫・0処理4種混合）"
+                        };
+                    } else if (unit.includes("小数のわり算")) {
+                        labels = {
+                            1: "レベル1（基礎：整数÷1桁の小数＝商は整数）",
+                            2: "レベル2（応用：2桁の小数÷1桁の小数＝商は小数）",
+                            3: "レベル3（発展：整数÷1桁の小数・わり進むタイプ）",
+                            4: "レベル4（最高峰：小数÷2桁の小数＝商は整数）"
+                        };
+                    } else if (unit.includes("異分母の通分・分数計算")) {
+                        labels = {
+                            1: "レベル1（基礎：真分数の異分母たし算・通分あり）",
+                            2: "レベル2（応用：真分数の異分母ひき算・通分あり）",
+                            3: "レベル3（発展：帯分数の異分母加減・くり上がり下がり）",
+                            4: "レベル4（最高峰：3つの分数の加減混合・中学受験）"
+                        };
+                    } else if (unit.includes("公倍数・公約数")) {
+                        labels = {
+                            1: "レベル1（【1列化】最小公倍数・基本2数）",
+                            2: "レベル2（【1列化】最大公約数・基本2数）",
+                            3: "レベル3（【1列化】混合：最小公倍数・最大公約数2数）",
+                            4: "レベル4（【1列化】最高峰：混合：3つの数の暗算）"
+                        };
+                    } else if (unit.includes("小数と分数のまじった計算（基礎）")) { // 新設
+                        labels = {
+                            1: "レベル1（基礎：分数に直しやすい小数との加減・通分なし）",
+                            2: "レベル2（応用：基本的な小数と異分母分数の加減）",
+                            3: "レベル3（発展：帯分数や3つの数がまじった加減）",
+                            4: "レベル4（最高峰：□を求める小数分数の虫食い算）"
+                        };
+                    } else if (unit.includes("単位の換算と計算")) { // 新設
+                        labels = {
+                            1: "レベル1（基礎：長さの換算を伴う計算・km/m/cm）",
+                            2: "レベル2（応用：重さの換算を伴う計算・kg/g）",
+                            3: "レベル3（発展：かさの換算を伴う計算・L/dL/mL）",
+                            4: "レベル4（最高峰：長さ・重さ・かさの複雑な四則混合換算）"
+                        };
+                    }
+                }
+        
+                // ==========================================
+                // 小学6年生のレベル文言定義（1つの単元のみ選択時）
+                // ==========================================
+                else if (grade === "6") {
+                    if (unit.includes("分数のかけ算")) {
+                        labels = {
+                            1: "レベル1（基礎：分数×整数・筆算の導入）",
+                            2: "レベル2（応用：分数×分数・斜め約分あり）",
+                            3: "レベル3（発展：帯分数のかけ算・仮分数化）",
+                            4: "レベル4（最高峰：混合：3つの分数／小数計算）"
+                        };
+                    } else if (unit.includes("分数のわり算")) {
+                        labels = {
+                            1: "レベル1（基礎：分数÷整数・基本計算）",
+                            2: "レベル2（応用：分数÷分数・逆数処理）",
+                            3: "レベル3（発展：帯分数のわり算・仮分数化）",
+                            4: "レベル4（最高峰：【1列化】かけ算わり算3数混合）"
+                        };
+                    } else if (unit.includes("比の計算")) {
+                        labels = {
+                            1: "レベル1（基礎：整数の比を最も簡単な比にする）",
+                            2: "レベル2（応用：小数・分数の比を簡単な比にする）",
+                            3: "レベル3（【1列化】発展：等しい比の□を求める・基）",
+                            4: "レベル4（【1列化】最高峰：等しい比の□を求める・応）"
+                        };
+                    } else if (unit.includes("文字を使った式")) {
+                        labels = {
+                            1: "レベル1（基礎：たし算の文字の式・χを求める）",
+                            2: "レベル2（応用：ひき算の文字の式・χを求める）",
+                            3: "レベル3（発展：かけ算の文字の式・χを求める）",
+                            4: "レベル4（最高峰：わり算の文字の式・χを求める）"
+                        };
+                    } else if (unit.includes("分数と小数の混合計算")) {
+                        labels = {
+                            1: "レベル1（【1列化】分数と小数の加減計算・基本）",
+                            2: "レベル2（【1列化】分数と小数の乗除計算・基本）",
+                            3: "レベル3（【1列化】分数・小数3つの加減乗除混合）",
+                            4: "レベル4（【1列化】最高峰：計算の工夫・分配法則）"
+                        };
+                    } else if (unit.includes("複雑な四則混合計算")) {
+                        labels = {
+                            1: "レベル1（【1列化】カッコのある分数・小数の3数混合）",
+                            2: "レベル2（【1列化】分数・小数の4数四則混合計算）",
+                            3: "レベル3（【1列化】発展：逆算・□を求める文字式混合）",
+                            4: "レベル4（【1列化】最高峰：中学受験・最難関レベル混合）"
+                        };
+                    } else if (unit.includes("比例の関係と代入計算")) { // 新設
+                        labels = {
+                            1: "レベル1（基礎：y = 決まった数 × x への整数の代入）",
+                            2: "レベル2（応用：y = 決まった数 × x への小数の代入）",
+                            3: "レベル3（発展：y = 決まった数 × x への分数の代入）",
+                            4: "レベル4（最高峰：【1列化】反比例 y = 決まった数 ÷ x への代入計算）" // 1列縦並びを意識
+                        };
+                    }
+                }
+            }
+        
+            // プルダウンのオプションを一度すべてクリアして再生成
+            levelSelect.innerHTML = "";
+            for (let i = 1; i <= 4; i++) {
+                const opt = document.createElement("option");
+                opt.value = String(i);
+                opt.textContent = labels[i];
+                levelSelect.appendChild(opt);
+            }
+        
+            // レベルの選択状態を維持
+            levelSelect.value = currentSelectedValue;
+            
+            // 問題数制限のバリデーションを連動実行
+            if (typeof validateQuestionCount === "function") {
+                validateQuestionCount();
+            }
+        }
+
+
+
+
+        function validateQuestionCount() {
+            const level = document.getElementById("level-select").value;
+            const qCountSelect = document.getElementById("question-count-select");
+            const checkedBoxes = document.querySelectorAll('input[name="unit-choice"]:checked');
+            const selectedUnits = Array.from(checkedBoxes).map(cb => cb.value);
+
+            // 【修正】4年生の四則混合Lv4、見積もり全Lvに加え、5年生の「公倍数・公約数の暗算」も常に10問（1列レイアウト）制限の対象にします
+            // 【修正】6年生のわり算Lv4、比の計算Lv3・4も自動的に10問（1列レイアウト）制限の対象にします
+            // 【新設統合】新設された長文・特殊レイアウト単元も自動的に10問（1列レイアウト）制限の対象に追加します
+            const isRestricted = 
+                (selectedUnits.some(u => u.includes("四則混合")) && level === "4") || 
+                selectedUnits.some(u => u.includes("見積もり")) ||
+                selectedUnits.some(u => u.includes("公倍数・公約数")) ||
+                (selectedUnits.some(u => u.includes("分数のわり算")) && level === "4") ||
+                (selectedUnits.some(u => u.includes("比の計算")) && (level === "3" || level === "4")) ||
+                selectedUnits.some(u => u.includes("混合計算")) ||
+                selectedUnits.some(u => u.includes("複雑な四則混合")) ||
+                selectedUnits.some(u => u.includes("あまりのあるわり算のたしかめ")) || // 3年新設
+                (selectedUnits.some(u => u.includes("小数の乗除筆算")) && level === "4") || // 4年新設Lv4のみ
+                selectedUnits.some(u => u.includes("単位の換算と計算")) || // 5年新設
+                (selectedUnits.some(u => u.includes("比例の関係と代入計算")) && level === "4"); // 6年新設Lv4のみ
+
+            Array.from(qCountSelect.options).forEach(option => {
+                const val = parseInt(option.value);
+                if (isRestricted && val > 10) {
+                    option.style.display = "none";
+                    option.disabled = true;
+                } else {
+                    option.style.display = "block";
+                    option.disabled = false;
+                }
+            });
+
+            if (isRestricted && parseInt(qCountSelect.value) > 10) {
+                qCountSelect.value = "10";
+            }
+        }
+
+
+
+        function createSingleQuestion(grade, unit, level) {
+
+
+            // ==========================================
+            // 小学1年生の単元ロジック
+            // ==========================================
+            if (unit === "1桁のたし算・ひき算") {
+                const isPlus = Math.random() > 0.5;
+                if (level === "1") { 
+                    if (isPlus) {
+                        // 答えが2〜9に収まる1桁＋1桁（全36パターンに拡大）
+                        let a = Math.floor(Math.random() * 8) + 1; // 1〜8
+                        let b = Math.floor(Math.random() * 8) + 1; // 1〜8
+                        while (a + b > 9) {
+                            a = Math.floor(Math.random() * 8) + 1;
+                            b = Math.floor(Math.random() * 8) + 1;
+                        }
+                        return { text: `${a} ＋ ${b} ＝`, ans: a + b };
+                    } else {
+                        // 答えが1〜8に収まる1桁－1桁（全36パターンに拡大）
+                        let a = Math.floor(Math.random() * 8) + 2; // 2〜9
+                        let b = Math.floor(Math.random() * 8) + 1; // 1〜8
+                        while (a - b < 1) {
+                            a = Math.floor(Math.random() * 8) + 2;
+                            b = Math.floor(Math.random() * 8) + 1;
+                        }
+                        return { text: `${a} － ${b} ＝`, ans: a - b };
+                    }
+                }
+
+                if (level === "2") { 
+                    let a = Math.floor(Math.random() * 9) + 1;
+                    if (isPlus) return { text: `${a} ＋ 0 ＝`, ans: a };
+                    else return { text: `${a} － 0 ＝`, ans: a };
+                }
+
+                if (level === "3") { 
+                    // 【改良】10の補数パターン（繰り上がり・下がりのさくらんぼ計算の基礎）の出現確率を80%に強化
+                    if (Math.random() < 0.8) {
+                        let a = Math.floor(Math.random() * 9) + 1; // 1〜9
+                        let b = 10 - a;
+                        if (Math.random() < 0.5) { // たし算ベース (□+b=10 または a+□=10)
+                            if (Math.random() < 0.5) {
+                                return { text: `□ ＋ ${b} ＝ 10`, ans: a };
+                            } else {
+                                return { text: `${a} ＋ □ ＝ 10`, ans: b };
+                            }
+                        } else { // ひき算ベース (10-□=b または □-a=b)
+                            if (Math.random() < 0.5) {
+                                return { text: `10 － □ ＝ ${b}`, ans: a };
+                            } else {
+                                return { text: `□ － ${a} ＝ ${b}`, ans: 10 };
+                            }
+                        }
+                    } else {
+                        // 残り20%は従来の通常虫食い算を出題
+                        let a = Math.floor(Math.random() * 5) + 1; let hidden = Math.floor(Math.random() * 4) + 1;
+                        if (isPlus) return { text: `${a} ＋ □ ＝ ${a + hidden}`, ans: hidden };
+                        else return { text: `${a + hidden} － □ ＝ ${a}`, ans: hidden };
+                    }
+                }
+
+                if (level === "4") {
+                    let a = Math.floor(Math.random() * 4) + 6; let b = Math.floor(Math.random() * 3) + 1; let c = Math.floor(Math.random() * 2) + 1; let d = Math.floor(Math.random() * 4) + 1; 
+                    return { text: `${a} － ${b} － ${c} ＋ ${d} ＝`, ans: a - b - c + d };
+                }
+            }
+
+            if (unit === "くり上がりのあるたし算") {
+                let a = Math.floor(Math.random() * 4) + 6; let b = Math.floor(Math.random() * 5) + 4; 
+                while (a + b <= 10) { b = Math.floor(Math.random() * 5) + 4; }
+
+                if (level === "1") return { text: `${a} ＋ ${b} ＝`, ans: a + b };
+                if (level === "2") return { text: `${b} ＋ ${a} ＝`, ans: b + a }; 
+                if (level === "3") return { text: `${a} ＋ □ ＝ ${a + b}`, ans: b }; 
+                if (level === "4") {
+                    let n1 = Math.floor(Math.random() * 5) + 11; let n2 = Math.floor(Math.random() * 4) + 6; let n3 = Math.floor(Math.random() * 5) + 4;  
+                    return { text: `${n1} ＋ ${n2} － ${n3} ＝`, ans: n1 + n2 - n3 };
+                }
+            }
+
+            if (unit === "くり下がりのあるひき算") {
+                let ans = Math.floor(Math.random() * 8) + 2; let b = Math.floor(Math.random() * 8) + 2; let a = ans + b;                             
+                while (a <= 10 || a >= 20) { ans = Math.floor(Math.random() * 8) + 2; b = Math.floor(Math.random() * 8) + 2; a = ans + b; }
+
+                if (level === "1") return { text: `${a} － ${b} ＝`, ans: ans };
+                if (level === "2") {
+                    if (Math.random() > 0.5) return { text: `11 － 2 ＝`, ans: 9 }; 
+                    else return { text: `${a} － ${ans} ＝`, ans: b };
+                }
+                if (level === "3") return { text: `${a} － □ ＝ ${ans}`, ans: b };
+                if (level === "4") {
+                    let bigA = a + Math.floor(Math.random() * 2) * 10 + 10; 
+                    return { text: `${bigA} － ${b} ＝`, ans: bigA - b };
+                }
+            }
+
+            if (unit === "3つの数の計算") {
+                if (level === "1") {
+                    if (Math.random() > 0.5) {
+                        let n1 = Math.floor(Math.random()*3)+1; let n2 = Math.floor(Math.random()*3)+1; let n3 = Math.floor(Math.random()*3)+1;
+                        return { text: `${n1} ＋ ${n2} ＋ ${n3} ＝`, ans: n1 + n2 + n3 };
+                    } else {
+                        let n2 = Math.floor(Math.random()*2)+1; let n3 = Math.floor(Math.random()*2)+2;
+                        return { text: `9 － ${n2} － ${n3} ＝`, ans: 9 - n2 - n3 };
+                    }
+                }
+                if (level === "2") {
+                    let a = Math.floor(Math.random()*5)+4; let b = Math.floor(Math.random()*3)+1; let c = Math.floor(Math.random()*3)+1; 
+                    if (Math.random() > 0.5) return { text: `${a} ＋ ${b} － ${c} ＝`, ans: a + b - c };
+                    else return { text: `${a} － ${b} ＋ ${c} ＝`, ans: a - b + c };
+                }
+                if (level === "3") {
+                    let n1 = Math.floor(Math.random()*4)+2; let n2 = Math.floor(Math.random()*3)+1;
+                    return { text: `${n1} ＋ □ － ${n2} ＝ ${n1 + 2}`, ans: n2 + 2 };
+                }
+                if (level === "4") {
+                    let n1 = Math.floor(Math.random() * 5) + 11; let n2 = Math.floor(Math.random() * 4) + 5; let n3 = Math.floor(Math.random() * 5) + 5; let n4 = Math.floor(Math.random() * 4) + 2; 
+                    return { text: `${n1} － ${n2} ＋ ${n3} － ${n4} ＝`, ans: n1 - n2 + n3 - n4 };
+                }
+            }
+
+            // 【新設単元】100へのアプローチ・何十の計算
+            if (unit === "100へのアプローチ・何十の計算") {
+                if (level === "1") {
+                    if (Math.random() < 0.5) { // 100 － 一桁
+                        let minus = Math.floor(Math.random() * 9) + 1; // 1〜9
+                        return { text: `100 － ${minus} ＝`, ans: 100 - minus };
+                    } else { // 何十 ＋ 一桁
+                        let plusX = (Math.floor(Math.random() * 9) + 1) * 10; // 10〜90
+                        let plusY = Math.floor(Math.random() * 9) + 1; // 1〜9
+                        return { text: `${plusX} ＋ ${plusY} ＝`, ans: plusX + plusY };
+                    }
+                }
+                if (level === "2") {
+                    if (Math.random() < 0.5) { // 何十 ＋ 何十 ＝ 100
+                        let plusX = (Math.floor(Math.random() * 8) + 1) * 10; // 10〜80
+                        let plusY = 100 - plusX;
+                        return { text: `${plusX} ＋ ${plusY} ＝`, ans: 100 };
+                    } else { // 100 － 何十
+                        let minusX = (Math.floor(Math.random() * 9) + 1) * 10; // 10〜90
+                        return { text: `100 － ${minusX} ＝`, ans: 100 - minusX };
+                    }
+                }
+                if (level === "3") {
+                    if (Math.random() < 0.5) { // 100 － 二桁
+                        let minus = Math.floor(Math.random() * 89) + 10; // 10〜98
+                        return { text: `100 － ${minus} ＝`, ans: 100 - minus };
+                    } else { // 二桁 ＋ 二桁 ＝ 100
+                        let plusX = Math.floor(Math.random() * 80) + 11; // 11〜91
+                        let plusY = 100 - plusX;
+                        return { text: `${plusX} ＋ ${plusY} ＝`, ans: 100 };
+                    }
+                }
+                if (level === "4") {
+                    if (Math.random() < 0.5) { // 何十 ＋ 何十 ＋ 何十 ＝ 100
+                        let x = (Math.floor(Math.random() * 6) + 1) * 10; // 10〜60
+                        let y = (Math.floor(Math.random() * ((100 - x) / 10 - 1)) + 1) * 10;
+                        let z = 100 - x - y;
+                        return { text: `${x} ＋ ${y} ＋ ${z} ＝`, ans: 100 };
+                    } else { // 100 － 何十 － 一桁
+                        let x = (Math.floor(Math.random() * 7) + 1) * 10; // 10〜70
+                        let y = Math.floor(Math.random() * 9) + 1; // 1〜9
+                        return { text: `100 － ${x} － ${y} ＝`, ans: 100 - x - y };
+                    }
+                }
+            }
+
+
+
+
+            // ==========================================
+            // 小学2年生の単元ロジック
+            // ==========================================
+            if (unit === "2桁のたし算（筆算）") {
+                if (level === "1") { 
+                    // 基礎：繰り上がりなし
+                    let a = Math.floor(Math.random() * 70) + 11; // 11〜80
+                    let b = Math.floor(Math.random() * 8) + 1;   // 1〜8
+                    while ((a % 10) + b >= 10) { b = Math.floor(Math.random() * 8) + 1; }
+                    let c = Math.floor(Math.random() * 7) + 1;   // 十の位
+                    while (Math.floor(a / 10) + c >= 10) { c = Math.floor(Math.random() * 7) + 1; }
+                    let finalB = c * 10 + b;
+                    return { text: `${a} ＋ ${finalB} ＝`, ans: a + finalB };
+                }
+                if (level === "2") { 
+                    // 応用：繰り上がりあり（2桁＋2桁、または百の位への繰り上がり）
+                    let a = Math.floor(Math.random() * 40) + 25; // 25〜64
+                    let b = Math.floor(Math.random() * 40) + 25;
+                    while ((a % 10) + (b % 10) < 10) { b = Math.floor(Math.random() * 40) + 25; }
+                    return { text: `${a} ＋ ${b} ＝`, ans: a + b };
+                }
+                if (level === "3") { 
+                    // 虫食い算：□に入る2桁または1桁の数
+                    let a = Math.floor(Math.random() * 50) + 15;
+                    let hidden = Math.floor(Math.random() * 30) + 11;
+                    if (Math.random() > 0.5) {
+                        return { text: `${a} ＋ □ ＝ ${a + hidden}`, ans: hidden };
+                    } else {
+                        return { text: `□ ＋ ${a} ＝ ${hidden + a}`, ans: hidden };
+                    }
+                }
+                if (level === "4") { 
+                    // 発展：3つの2桁のたし算（繰り上がり複数回）
+                    let a = Math.floor(Math.random() * 30) + 15;
+                    let b = Math.floor(Math.random() * 30) + 15;
+                    let c = Math.floor(Math.random() * 30) + 15;
+                    return { text: `${a} ＋ ${b} ＋ ${c} ＝`, ans: a + b + c };
+                }
+            }
+
+            if (unit === "2桁のひき算（筆算）") {
+                if (level === "1") { 
+                    // 基礎：繰り下がりなし
+                    let a = Math.floor(Math.random() * 70) + 25; // 25〜95
+                    let b1 = Math.floor(Math.random() * (a % 10)); // 一の位の引き算で負にならない
+                    let b10 = Math.floor(Math.random() * (Math.floor(a / 10) - 1)) + 1; // 十の位
+                    let b = b10 * 10 + b1;
+                    return { text: `${a} － ${b} ＝`, ans: a - b };
+                }
+                if (level === "2") { 
+                    // 応用：繰り下がりあり
+                    let a = Math.floor(Math.random() * 70) + 25; // 25〜95
+                    while (a % 10 === 9 || a % 10 === 0) { a = Math.floor(Math.random() * 70) + 25; }
+                    let b1 = Math.floor(Math.random() * 9) + 1;
+                    while (b1 <= (a % 10)) { b1 = Math.floor(Math.random() * 9) + 1; } // 一の位で繰り下がり発生
+                    let b10 = Math.floor(Math.random() * (Math.floor(a / 10) - 1)) + 1;
+                    let b = b10 * 10 + b1;
+                    return { text: `${a} － ${b} ＝`, ans: a - b };
+                }
+                if (level === "3") { 
+                    // 虫食い算
+                    let ans = Math.floor(Math.random() * 40) + 15;
+                    let b = Math.floor(Math.random() * 30) + 15;
+                    let a = ans + b;
+                    if (Math.random() > 0.5) {
+                        return { text: `${a} － □ ＝ ${ans}`, ans: b };
+                    } else {
+                        return { text: `□ － ${b} ＝ ${ans}`, ans: a };
+                    }
+                }
+                if (level === "4") { 
+                    // 【強化】最高峰：100台からの繰り下がり（0またぎを確定で出題して児童のつまずきを徹底補強）
+                    if (Math.random() < 0.5) {
+                        // パターンA: 10X - Y8 などの十の位が必ず「0」のタイプ (例: 103 - 47)
+                        let onesA = Math.floor(Math.random() * 5); // 0〜4
+                        let onesB = Math.floor(Math.random() * 5) + 5; // 5〜9 (必ず一の位が繰り下がる)
+                        let tensB = Math.floor(Math.random() * 8) + 1; // 10〜80
+                        let baseA = 100 + onesA; // 100〜104
+                        let baseB = (tensB * 10) + onesB;
+                        while (baseA - baseB <= 0) { // 負の数を防止
+                            tensB = Math.floor(Math.random() * 8) + 1;
+                            baseB = (tensB * 10) + onesB;
+                        }
+                        return { text: `${baseA} － ${baseB} ＝`, ans: baseA - baseB };
+                    } else {
+                        // パターンB: 200, 300 などのピッタリ何百からの引き算 (例: 300 - 142)
+                        let h_num = (Math.floor(Math.random() * 3) + 1) * 100; // 100, 200, 300
+                        let minus = Math.floor(Math.random() * (h_num - 11)) + 11;
+                        // 一の位、十の位が0にならないように調整（単純な「何百ひく何十」を回避し、難易度を担保）
+                        while(minus % 10 === 0 || Math.floor(minus / 10) % 10 === 0) {
+                            minus = Math.floor(Math.random() * (h_num - 11)) + 11;
+                        }
+                        return { text: `${h_num} － ${minus} ＝`, ans: h_num - minus };
+                    }
+                }
+            }
+
+            if (unit === "かけ算九九") {
+                if (level === "1") { 
+                    // 基礎：2, 3, 4, 5の段
+                    let b = Math.floor(Math.random() * 9) + 1;
+                    const easySteps = [2, 3, 4, 5];
+                    let a = easySteps[Math.floor(Math.random() * easySteps.length)];
+                    return { text: `${a} × ${b} ＝`, ans: a * b };
+                }
+                if (level === "2") { 
+                    // 応用：6, 7, 8, 9の段
+                    let b = Math.floor(Math.random() * 9) + 1;
+                    const hardSteps = [6, 7, 8, 9];
+                    let a = hardSteps[Math.floor(Math.random() * hardSteps.length)];
+                    return { text: `${a} × ${b} ＝`, ans: a * b };
+                }
+                if (level === "3") { 
+                    // 【改良】虫食い算：1の段を完全排除、わり算接続のために6〜9の段の出現確率を大幅底上げ
+                    let dan = Math.floor(Math.random() * 8) + 2; // 2〜9の段（1の段カット）
+                    let num = Math.floor(Math.random() * 9) + 1;  // 1〜9
+                    if (Math.random() < 0.4) { 
+                        dan = Math.floor(Math.random() * 4) + 6; // 40%の確率でさらに6, 7, 8, 9の段に偏らせる
+                    }
+                    let prod = dan * num;
+                    if (Math.random() < 0.5) {
+                        return { text: `${dan} × □ ＝ ${prod}`, ans: num };
+                    } else {
+                        return { text: `□ × ${num} ＝ ${prod}`, ans: dan };
+                    }
+                }
+                if (level === "4") { 
+                    // 発展：10の段、11の段、または九九の拡張（一桁×12など）
+                    let bigB = Math.floor(Math.random() * 4) + 11; // 11〜14
+                    let singleA = Math.floor(Math.random() * 7) + 3; // 3〜9
+                    return { text: `${singleA} × ${bigB} ＝`, ans: singleA * bigB };
+                }
+            }
+
+            if (unit === "簡単な3桁の計算") {
+                if (level === "1") { 
+                    // 基礎：何百の計算（300＋400、800－200など）
+                    let n1 = (Math.floor(Math.random() * 4) + 1) * 100; // 100〜400
+                    let n2 = (Math.floor(Math.random() * 4) + 1) * 100; // 100〜400
+                    if (Math.random() > 0.5) {
+                        return { text: `${n1} ＋ ${n2} ＝`, ans: n1 + n2 };
+                    } else {
+                        let max = Math.max(n1, n2); let min = Math.min(n1, n2);
+                        return { text: `${max + 100} － ${min} ＝`, ans: (max + 100) - min };
+                    }
+                }
+                if (level === "2") { 
+                    // 応用：3桁±1桁・2桁（繰り上がり・下がりがマイルドなもの）
+                    let base = (Math.floor(Math.random() * 8) + 1) * 100; // 100〜800
+                    if (Math.random() > 0.5) {
+                        let b = Math.floor(Math.random() * 89) + 10; // 10〜99
+                        return { text: `${base} ＋ ${b} ＝`, ans: base + b };
+                    } else {
+                        let a = base + Math.floor(Math.random() * 50) + 40;
+                        let b = Math.floor(Math.random() * 30) + 10;
+                        return { text: `${a} － ${b} ＝`, ans: a - b };
+                    }
+                }
+                if (level === "3") { 
+                    // 虫食い算
+                    let a = (Math.floor(Math.random() * 5) + 1) * 100; // 100〜500
+                    let hidden = Math.floor(Math.random() * 89) + 10;
+                    return { text: `${a} ＋ □ ＝ ${a + hidden}`, ans: hidden };
+                }
+                if (level === "4") { 
+                    // 発展：3桁の四則混合（九九と3桁の足し引きの融合など）
+                    let a = (Math.floor(Math.random() * 5) + 2) * 100; // 200〜600
+                    let b = Math.floor(Math.random() * 8) + 2;
+                    let c = Math.floor(Math.random() * 8) + 2;
+                    return { text: `${a} － ${b} × ${c} ＝`, ans: a - (b * c) };
+                }
+            }
+
+
+
+
+
+            // ==========================================
+            // 小学3年生の単元ロジック
+            // ==========================================
+            if (unit === "3桁・4桁の筆算") {
+                if (level === "1") { 
+                    // 基礎：3桁±3桁（繰り上がり・繰り下がりが少ないもの）
+                    let a = Math.floor(Math.random() * 400) + 100; // 100〜499
+                    let b = Math.floor(Math.random() * 400) + 100; // 100〜499
+                    if (Math.random() > 0.5) {
+                        return { text: `${a} ＋ ${b} ＝`, ans: a + b };
+                    } else {
+                        let max = Math.max(a, b); let min = Math.min(a, b);
+                        return { text: `${max + 200} － ${min} ＝`, ans: (max + 200) - min };
+                    }
+                }
+                if (level === "2") { 
+                    // 応用：4桁±4桁（連続繰り上がり・繰り下がりあり）
+                    let a = Math.floor(Math.random() * 4000) + 2000; // 2000〜5999
+                    let b = Math.floor(Math.random() * 1500) + 1000; // 1000〜2499
+                    if (Math.random() > 0.5) {
+                        return { text: `${a} ＋ ${b} ＝`, ans: a + b };
+                    } else {
+                        return { text: `${a} － ${b} ＝`, ans: a - b };
+                    }
+                }
+                if (level === "3") { 
+                    // 虫食い算：3桁の足し引きの□
+                    let a = Math.floor(Math.random() * 300) + 150; // 150〜449
+                    let hidden = Math.floor(Math.random() * 200) + 50; // 50〜249
+                    if (Math.random() > 0.5) {
+                        return { text: `${a} ＋ □ ＝ ${a + hidden}`, ans: hidden };
+                    } else {
+                        return { text: `${a + hidden} － □ ＝ ${a}`, ans: hidden };
+                    }
+                }
+                if (level === "4") { 
+                    // 3つの数の加減混合
+                    let a = Math.floor(Math.random() * 600) + 200; 
+                    let b = Math.floor(Math.random() * 300) + 100; 
+                    let c = Math.floor(Math.random() * 200) + 100; 
+                    if (Math.random() > 0.7) { a = Math.floor(Math.random() * 500) + 1000; }
+                    
+                    // 【スペース改善】＝の後に折り返し、アンダーライン解答欄を美しく配置
+                    const qHTML = `<div style="display:inline-block; vertical-align:middle; width:100%; white-space:normal; line-height:1.8;">${a} ＋ ${b} － ${c} ＝ <span style="display:inline-block; width:100px; border-bottom:1px solid #000; margin-left:5px; vertical-align:bottom; height:24px;"></span></div>`;
+                    return { text: qHTML, ans: String(a + b - c), isHTML: true };
+                }
+            }
+
+            if (unit === "かけ算の筆算") {
+                if (level === "1") { 
+                    // 基礎：2桁×1桁（筆算の導入・繰り上がりあり）
+                    let a = Math.floor(Math.random() * 70) + 12; // 12〜81
+                    let b = Math.floor(Math.random() * 7) + 3;   // 3〜9
+                    return { text: `${a} × ${b} ＝`, ans: a * b };
+                }
+                if (level === "2") { 
+                    // 応用：2桁×2桁（一般的な筆算計算）
+                    let a = Math.floor(Math.random() * 70) + 12; // 12〜81
+                    let b = Math.floor(Math.random() * 70) + 12; // 12〜81
+                    return { text: `${a} × ${b} ＝`, ans: a * b };
+                }
+                if (level === "3") { 
+                    // 虫食い算：何十をかける計算、または簡単な2桁×□
+                    let a = Math.floor(Math.random() * 8) + 2; // 2〜9
+                    let hidden = Math.floor(Math.random() * 3) + 2; // 2〜4
+                    let finalA = a * 10; // 20, 30...90
+                    return { text: `${finalA} × □ ＝ ${finalA * hidden}`, ans: hidden };
+                }
+                if (level === "4") { 
+                    // 発展：3桁×2桁（3年生の上限発展問題）
+                    let a = Math.floor(Math.random() * 200) + 105; // 105〜304
+                    let b = Math.floor(Math.random() * 30) + 12;   // 12〜41
+                    return { text: `${a} × ${b} ＝`, ans: a * b };
+                }
+            }
+
+            if (unit === "わり算（あまりなし・あり）") {
+                // ベースとなる九九の数値を準備
+                let b = Math.floor(Math.random() * 8) + 2;   // わる数（2〜9）
+                let ans = Math.floor(Math.random() * 8) + 2; // 商（2〜9）
+                let a = b * ans;                             // わられる数
+                
+                if (level === "1") { 
+                    // 基礎：あまりなし（九九の逆算）
+                    return { text: `${a} ÷ ${b} ＝`, ans: ans };
+                }
+                if (level === "2") { 
+                    // 応用：あまりあり（九九の範囲内）
+                    let amari = Math.floor(Math.random() * (b - 1)) + 1; // あまりは「わる数」より小さく
+                    return { text: `${a + amari} ÷ ${b} ＝`, ans: `${ans} あまり ${amari}` };
+                }
+                if (level === "3") { 
+                    // 虫食い算：わられる数を求める□（あまりあり）
+                    let amari = Math.floor(Math.random() * (b - 1)) + 1;
+                    return { text: `□ ÷ ${b} ＝ ${ans} あまり ${amari}`, ans: a + amari };
+                }
+                if (level === "4") { 
+                    // 発展：2桁÷1桁で、商が2桁になるわり算（あまりあり・なし混合）
+                    let bigAns = Math.floor(Math.random() * 20) + 12; // 商が12〜31
+                    let divisor = Math.floor(Math.random() * 3) + 2;  // わる数が2〜4
+                    let baseNum = bigAns * divisor;
+                    if (Math.random() > 0.5) {
+                        return { text: `${baseNum} ÷ ${divisor} ＝`, ans: bigAns };
+                    } else {
+                        let amari = Math.floor(Math.random() * (divisor - 1)) + 1;
+                        return { text: `${baseNum + amari} ÷ ${divisor} ＝`, ans: `${bigAns} あまり ${amari}` };
+                    }
+                }
+            }
+
+            if (unit === "小数の加法と減法") {
+                if (level === "1") { 
+                    // 基礎：小数第一位どうしの足し引き（繰り上がり・下がりなし）
+                    let a = Math.floor(Math.random() * 4) + 1; // 1〜4 (0.1〜0.4)
+                    let b = Math.floor(Math.random() * 4) + 1; // 1〜4 (0.1〜0.4)
+                    if (Math.random() > 0.5) {
+                        return { text: `${(a/10).toFixed(1)} ＋ ${(b/10).toFixed(1)} ＝`, ans: ((a+b)/10).toFixed(1) };
+                    } else {
+                        let max = Math.max(a, b); let min = Math.min(a, b);
+                        return { text: `${(max/10).toFixed(1)} － ${(min/10).toFixed(1)} ＝`, ans: ((max-min)/10).toFixed(1) };
+                    }
+                }
+                if (level === "2") { 
+                    // 応用：繰り上がり・繰り下がりあり
+                    let a = Math.floor(Math.random() * 6) + 6; // 6〜11 (0.6〜1.1)
+                    let b = Math.floor(Math.random() * 5) + 5; // 5〜9 (0.5〜0.9)
+                    if (Math.random() > 0.5) {
+                        return { text: `${(a/10).toFixed(1)} ＋ ${(b/10).toFixed(1)} ＝`, ans: ((a+b)/10).toFixed(1) };
+                    } else {
+                        // 1.3 - 0.7 のような計算
+                        let start = Math.floor(Math.random() * 5) + 11; // 11〜15 (1.1〜1.5)
+                        let sub = Math.floor(Math.random() * 5) + 5;    // 5〜9 (0.5〜0.9)
+                        return { text: `${(start/10).toFixed(1)} － ${(sub/10).toFixed(1)} ＝`, ans: ((start-sub)/10).toFixed(1) };
+                    }
+                }
+                if (level === "3") { 
+                    // 虫食い算
+                    let a = Math.floor(Math.random() * 6) + 2; // 0.2〜0.7
+                    let hidden = Math.floor(Math.random() * 5) + 3; // 0.3〜0.7
+                    let total = a + hidden;
+                    return { text: `${(a/10).toFixed(1)} ＋ □ ＝ ${(total/10).toFixed(1)}`, ans: (hidden/10).toFixed(1) };
+                }
+                if (level === "4") { 
+                    // 発展：整数と小数の混ざった計算（例: 1 － 0.3）
+                    let upper = Math.floor(Math.random() * 3) + 1; // 1〜3
+                    let sub = Math.floor(Math.random() * 8) + 1;   // 1〜8 (0.1〜0.8)
+                    return { text: `${upper} － ${(sub/10).toFixed(1)} ＝`, ans: (upper - (sub/10)).toFixed(1) };
+                }
+            }
+
+            if (unit === "簡単な分数の加法と減法") {
+                let d = Math.floor(Math.random() * 5) + 5; // 分母を5〜9で固定
+                let a = Math.floor(Math.random() * 3) + 1; // 分子1
+                let b = Math.floor(Math.random() * 3) + 1; // 分子2
+                while (a + b >= d) { b = Math.floor(Math.random() * 3) + 1; } // 分子が分母を超えないように調整
+
+                // 分数HTMLを生成するインライン関数
+                const f = (num, den) => `<span class="fraction"><span class="numerator">${num}</span><span class="denominator">${den}</span></span>`;
+                
+                if (level === "1") { 
+                    // 基礎：同分母の足し引き（答えが1未満）
+                    if (Math.random() > 0.5) {
+                        return { text: `${f(a, d)} ＋ ${f(b, d)} ＝`, ans: f(a+b, d) };
+                    } else {
+                        let max = Math.max(a, b); let min = Math.min(a, b);
+                        if (max === min) max++;
+                        return { text: `${f(max, d)} － ${f(min, d)} ＝`, ans: f(max-min, d) };
+                    }
+                }
+                if (level === "2") { 
+                    // 応用：答えが1になる、または1から引く分数計算
+                    if (Math.random() > 0.5) {
+                        let subNum = Math.floor(Math.random() * (d - 2)) + 1;
+                        return { text: `${f(subNum, d)} ＋ ${f(d - subNum, d)} ＝`, ans: "1" };
+                    } else {
+                        let subNum = Math.floor(Math.random() * (d - 2)) + 1;
+                        return { text: `1 － ${f(subNum, d)} ＝`, ans: f(d - subNum, d) };
+                    }
+                }
+                if (level === "3") { 
+                    // 虫食い算
+                    let totalVal = a + b;
+                    return { text: `${f(a, d)} ＋ □ ＝ ${f(totalVal, d)}`, ans: f(b, d) };
+                }
+                if (level === "4") { 
+                    // 発展：3つの分数の加減混合
+                    let c = Math.floor(Math.random() * 2) + 1;
+                    while (a + b + c >= d) { b = Math.floor(Math.random() * 2) + 1; c = Math.floor(Math.random() * 2) + 1; }
+                    return { text: `${f(a, d)} ＋ ${f(b, d)} ＋ ${f(c, d)} ＝`, ans: f(a+b+c, d) };
+                }
+            }
+
+            // 【新設単元】あまりのあるわり算のたしかめ（検算）
+            if (unit === "あまりのあるわり算のたしかめ（検算）") {
+                let divisor = Math.floor(Math.random() * 8) + 2; // わる数（2〜9）
+                let quotient, remainder, dividend;
+
+                if (level === "1") {
+                    // 基礎：九九 of 範囲での基本のたしかめ式
+                    quotient = Math.floor(Math.random() * 8) + 2; 
+                    remainder = Math.floor(Math.random() * (divisor - 1)) + 1;
+                    dividend = divisor * quotient + remainder;
+                    
+                    const qHTML = `<div style="line-height:1.5;">${dividend} ÷ ${divisor} ＝ ${quotient} あまり ${remainder}</div><div style="font-size:0.85em; color:#444; margin-top:4px;">たしかめのしき：</div>`;
+                    return { text: qHTML, ans: `${divisor} × ${quotient} ＋ ${remainder} ＝ ${dividend}`, isHTML: true };
+                }
+                if (level === "2") {
+                    // 応用：割られる数が2桁後半（商が10〜14）
+                    quotient = Math.floor(Math.random() * 5) + 10; 
+                    remainder = Math.floor(Math.random() * (divisor - 1)) + 1;
+                    dividend = divisor * quotient + remainder;
+                    
+                    const qHTML = `<div style="line-height:1.5;">${dividend} ÷ ${divisor} ＝ ${quotient} あまり ${remainder}</div><div style="font-size:0.85em; color:#444; margin-top:4px;">たしかめのしき：</div>`;
+                    return { text: qHTML, ans: `${divisor} × ${quotient} ＋ ${remainder} ＝ ${dividend}`, isHTML: true };
+                }
+                if (level === "3") {
+                    // 虫食い算：式自体を一部□にする
+                    quotient = Math.floor(Math.random() * 8) + 2;
+                    remainder = Math.floor(Math.random() * (divisor - 1)) + 1;
+                    dividend = divisor * quotient + remainder;
+                    
+                    if (Math.random() < 0.5) {
+                        return { text: `たしかめのしき：${divisor} × □ ＋ ${remainder} ＝ ${dividend}`, ans: quotient.toString() };
+                    } else {
+                        return { text: `たしかめのしき：${divisor} × ${quotient} ＋ □ ＝ ${dividend}`, ans: remainder.toString() };
+                    }
+                }
+                if (level === "4") {
+                    // 最高峰：割られる数が3桁
+                    quotient = Math.floor(Math.random() * 40) + 11; 
+                    remainder = Math.floor(Math.random() * (divisor - 1)) + 1;
+                    dividend = divisor * quotient + remainder;
+                    while (dividend < 100) { 
+                        quotient = Math.floor(Math.random() * 40) + 11;
+                        dividend = divisor * quotient + remainder;
+                    }
+                    
+                    const qHTML = `<div style="line-height:1.5;">${dividend} ÷ ${divisor} ＝ ${quotient} あまり ${remainder}</div><div style="font-size:0.85em; color:#444; margin-top:4px;">たしかめのしき：</div>`;
+                    return { text: qHTML, ans: `${divisor} × ${quotient} ＋ ${remainder} ＝ ${dividend}`, isHTML: true };
+                }
+            }
+
+
+
+
+
+            // ==========================================
+            // 小学4年生の単元ロジック
+            // ==========================================
+            if (unit === "わり算の筆算") {
+                if (level === "1") { 
+                    // 基礎：3桁÷1桁の筆算（3年生の復習・あまりありなし混合）
+                    let b = Math.floor(Math.random() * 7) + 3;   // わる数（3〜9）
+                    let ans = Math.floor(Math.random() * 70) + 15; // 商（15〜84の2桁）
+                    let base = b * ans;
+                    if (Math.random() > 0.5) {
+                        return { text: `${base} ÷ ${b} ＝`, ans: ans };
+                    } else {
+                        let amari = Math.floor(Math.random() * (b - 1)) + 1;
+                        return { text: `${base + amari} ÷ ${b} ＝`, ans: `${ans} あまり ${amari}` };
+                    }
+                }
+                if (level === "2") { 
+                    // 応用：3桁÷2桁の一般的な筆算（商が1桁または2桁）
+                    let b = Math.floor(Math.random() * 20) + 12;   // わる数（12〜31の2桁）
+                    let ans = Math.floor(Math.random() * 15) + 5;  // 商（5〜19）
+                    let base = b * ans;
+                    let amari = Math.floor(Math.random() * (b - 1)) + 1;
+                    return { text: `${base + amari} ÷ ${b} ＝`, ans: `${ans} あまり ${amari}` };
+                }
+                if (level === "3") { 
+                    // 虫食い算：わられる数を求める□（3桁÷2桁）
+                    let b = Math.floor(Math.random() * 15) + 11;  // わる数（11〜25）
+                    let ans = Math.floor(Math.random() * 8) + 6;   // 商（6〜13）
+                    let amari = Math.floor(Math.random() * 5) + 1; // あまり
+                    let target = b * ans + amari;
+                    return { text: `□ ÷ ${b} ＝ ${ans} あまり ${amari}`, ans: target };
+                }
+                if (level === "4") { 
+                    // 発展：4桁÷2桁の大きな筆算（商が3桁になるもの）
+                    let b = Math.floor(Math.random() * 30) + 15;    // わる数（15〜44）
+                    let ans = Math.floor(Math.random() * 150) + 105; // 商（105〜254）
+                    let base = b * ans;
+                    return { text: `${base} ÷ ${b} ＝`, ans: ans };
+                }
+            }
+
+            if (unit === "小数のたし算・ひき算") {
+                if (level === "1") { 
+                    // 基礎：小数第二位（0.01の位）までの計算（繰り上がり・下がりなし）
+                    let a = (Math.floor(Math.random() * 40) + 10) / 100; // 0.10〜0.49
+                    let b = (Math.floor(Math.random() * 40) + 10) / 100; // 0.10〜0.49
+                    if (Math.random() > 0.5) {
+                        return { text: `${a.toFixed(2)} ＋ ${b.toFixed(2)} ＝`, ans: (a + b).toFixed(2) };
+                    } else {
+                        let max = Math.max(a, b); let min = Math.min(a, b);
+                        return { text: `${max.toFixed(2)} － ${min.toFixed(2)} ＝`, ans: (max - min).toFixed(2) };
+                    }
+                }
+                if (level === "2") { 
+                    // 応用：桁数の違う小数の筆算（例: 3.4 ＋ 2.56 や 5 － 1.24 などミスしやすいもの）
+                    if (Math.random() > 0.5) {
+                        let a = (Math.floor(Math.random() * 50) + 11) / 10;   // 1.1〜6.0 (小数第一位)
+                        let b = (Math.floor(Math.random() * 80) + 11) / 100;  // 0.11〜0.91 (小数第二位)
+                        return { text: `${a.toFixed(1)} ＋ ${b.toFixed(2)} ＝`, ans: (a + b).toFixed(2) };
+                    } else {
+                        let a = Math.floor(Math.random() * 4) + 2;            // 2〜5 (整数)
+                        let b = (Math.floor(Math.random() * 150) + 11) / 100; // 0.11〜1.61 (小数第二位)
+                        return { text: `${a} － ${b.toFixed(2)} ＝`, ans: (a - b).toFixed(2) };
+                    }
+                }
+                if (level === "3") { 
+                    // 虫食い算：□を使った小数計算
+                    let a = (Math.floor(Math.random() * 50) + 11) / 10; // 1.1〜6.0
+                    let hidden = (Math.floor(Math.random() * 80) + 11) / 100; // 0.11〜0.91
+                    let total = a + hidden;
+                    return { text: `${a.toFixed(1)} ＋ □ ＝ ${total.toFixed(2)}`, ans: hidden.toFixed(2) };
+                }
+                if (level === "4") { 
+                    // 発展：3つの小数の加減混合
+                    let a = (Math.floor(Math.random() * 300) + 100) / 100; 
+                    let b = (Math.floor(Math.random() * 9) + 1) / 10;      
+                    let c = (Math.floor(Math.random() * 50) + 10) / 100;   
+                    
+                    // 【スペース改善】数式が長いため折り返しとアンダーライン解答欄を実装
+                    const qHTML = `<div style="display:inline-block; vertical-align:middle; width:100%; white-space:normal; line-height:1.8;">${a.toFixed(2)} ＋ ${b.toFixed(1)} － ${c.toFixed(2)} ＝ <span style="display:inline-block; width:100px; border-bottom:1px solid #000; margin-left:5px; vertical-align:bottom; height:24px;"></span></div>`;
+                    return { text: qHTML, ans: (a + b - c).toFixed(2), isHTML: true };
+                }
+            }
+
+            if (unit === "整数の四則混合計算") {
+                if (level === "1") { 
+                    // 基礎：カッコなし、＋－と×÷の混ざった3つの数の計算（かけ算優先）
+                    let a = Math.floor(Math.random() * 40) + 10; // 10〜49
+                    let b = Math.floor(Math.random() * 7) + 2;   // 2〜8
+                    let c = Math.floor(Math.random() * 6) + 2;   // 2〜7
+                    if (Math.random() > 0.5) {
+                        return { text: `${a} ＋ ${b} × ${c} ＝`, ans: a + (b * c) };
+                    } else {
+                        while (a < b * c) { a = Math.floor(Math.random() * 40) + 30; }
+                        return { text: `${a} － ${b} × ${c} ＝`, ans: a - (b * c) };
+                    }
+                }
+                if (level === "2") { 
+                    // 応用：カッコ()のある3つの数の計算（カッコ内優先）
+                    let a = Math.floor(Math.random() * 20) + 5;  // 5〜24
+                    let b = Math.floor(Math.random() * 20) + 5;  // 5〜24
+                    let c = Math.floor(Math.random() * 4) + 2;   // 2〜5
+                    // (a + b) × c または (a - b) × c (割り切れるように調整)
+                    if (Math.random() > 0.5) {
+                        return { text: `（${a} ＋ ${b}）× ${c} ＝`, ans: (a + b) * c };
+                    } else {
+                        let max = Math.max(a, b); let min = Math.min(a, b);
+                        if (max === min) max += 5;
+                        let mul = Math.floor(Math.random() * 4) + 2; // わる数
+                        let diff = mul * (Math.floor(Math.random() * 5) + 2); // 差を倍数にする
+                        return { text: `（${min + diff} － ${min}）÷ ${mul} ＝`, ans: diff / mul };
+                    }
+                }
+                if (level === "3") { 
+                    // 虫食い算：逆算の基礎（□を使った四則混合）
+                    let b = Math.floor(Math.random() * 5) + 3;   // 3〜7
+                    let c = Math.floor(Math.random() * 4) + 2;   // 2〜5
+                    let ans = Math.floor(Math.random() * 30) + 20; // 20〜49
+                    let base = ans - (b * c);
+                    return { text: `□ ＋ ${b} × ${c} ＝ ${ans}`, ans: base };
+                }
+                if (level === "4") { 
+                    // 【強化】作業化を防ぐため、カッコと記号の位置が異なる4パターンを完全ランダム化
+                    const pattern = Math.floor(Math.random() * 4);
+                    
+                    if (pattern === 0) {
+                        // パターン0: a ＋ (b － c × d) ÷ e
+                        let e = Math.floor(Math.random() * 2) + 2; // 2〜3
+                        let c = Math.floor(Math.random() * 3) + 2; // 2〜4
+                        let d = Math.floor(Math.random() * 2) + 2; // 2〜3
+                        let b = (c * d) + (e * (Math.floor(Math.random() * 3) + 2));
+                        let a = Math.floor(Math.random() * 10) + 5;
+                        return { text: `${a} ＋ （${b} － ${c} × ${d}） ÷ ${e} ＝`, ans: a + (b - c * d) / e };
+                    }
+                    else if (pattern === 1) {
+                        // パターン1: (a ＋ b) × c － d ÷ e
+                        let e = Math.floor(Math.random() * 2) + 2; // 2〜3
+                        let d = e * (Math.floor(Math.random() * 3) + 2); // 割り切れるd
+                        let a = Math.floor(Math.random() * 5) + 2;
+                        let b = Math.floor(Math.random() * 5) + 2;
+                        let c = Math.floor(Math.random() * 3) + 2;
+                        return { text: `（${a} ＋ ${b}） × ${c} － ${d} ÷ ${e} ＝`, ans: (a + b) * c - d / e };
+                    }
+                    else if (pattern === 2) {
+                        // パターン2: a × b － （c ＋ d） ÷ e
+                        let e = Math.floor(Math.random() * 2) + 2;
+                        let c = Math.floor(Math.random() * 10) + 5;
+                        let d = e * (Math.floor(Math.random() * 3) + 1) - (c % e); 
+                        if (d <= 0) d += e * 3; // 正の数になるよう調整
+                        let a = Math.floor(Math.random() * 5) + 3;
+                        let b = Math.floor(Math.random() * 5) + 3;
+                        return { text: `${a} × ${b} － （${c} ＋ ${d}） ÷ ${e} ＝`, ans: a * b - (c + d) / e };
+                    }
+                    else {
+                        // パターン3: a ＋ b × （c － d） － e
+                        let d = Math.floor(Math.random() * 5) + 2;
+                        let c = d + Math.floor(Math.random() * 4) + 2; // c > d
+                        let b = Math.floor(Math.random() * 4) + 2;
+                        let a = Math.floor(Math.random() * 20) + 10;
+                        let e = Math.floor(Math.random() * 5) + 2;
+                        return { text: `${a} ＋ ${b} × （${c} － ${d}） － ${e} ＝`, ans: a + b * (c - d) - e };
+                    }
+                }
+            }
+
+            // 【新設単元】計算のきまり（工夫して計算）
+            if (unit === "計算のきまり（工夫して計算）") {
+                if (level === "1") {
+                    // 基礎：交換・結合法則の活用
+                    let pair = Math.random() < 0.5 ? 25 : 75; 
+                    let base = 100 - pair;
+                    let other = Math.floor(Math.random() * 50) + 11; 
+                    if (Math.random() < 0.5) {
+                        return { text: `${pair} ＋ ${other} ＋ ${base} ＝`, ans: 100 + other };
+                    } else {
+                        return { text: `${other} ＋ ${pair} ＋ ${base} ＝`, ans: 100 + other };
+                    }
+                }
+                if (level === "2") {
+                    // 応用：分配法則の基礎
+                    let a = Math.floor(Math.random() * 7) + 3; 
+                    let b = Math.floor(Math.random() * 8) + 2; 
+                    let c = 10 - b; 
+                    return { text: `${a} × （ ${b} ＋ ${c} ） ＝`, ans: a * 10 };
+                }
+                if (level === "3") {
+                    // 発展：分配法則の逆算
+                    let a = Math.floor(Math.random() * 8) + 2; 
+                    let b = Math.floor(Math.random() * 8) + 2; 
+                    let c = 10 - b; 
+                    return { text: `${a} × ${b} ＋ ${a} × ${c} ＝`, ans: a * 10 };
+                }
+                if (level === "4") {
+                    // 最高峰：101や99を掛け算に変形する工夫
+                    let a = Math.floor(Math.random() * 8) + 2; 
+                    if (Math.random() < 0.5) {
+                        return { text: `${a} × 101 ＝`, ans: a * 101 };
+                    } else {
+                        return { text: `${a} × 99 ＝`, ans: a * 99 };
+                    }
+                }
+            }
+
+            // 【新設単元】小数の乗除筆算（小数×整数・小数÷整数）
+            if (unit === "小数の乗除筆算（小数×整数・小数÷整数）") {
+                if (level === "1") {
+                    // 基礎：1桁の小数 × 1桁の整数
+                    let a = (Math.floor(Math.random() * 9) + 1) / 10; 
+                    let b = Math.floor(Math.random() * 8) + 2; 
+                    return { text: `${a.toFixed(1)} × ${b} ＝`, ans: (Math.round(a * b * 10) / 10).toFixed(1) };
+                }
+                if (level === "2") {
+                    // 応用：2桁の小数 × 1桁の整数・筆算
+                    let a = (Math.floor(Math.random() * 89) + 10) / 10; 
+                    let b = Math.floor(Math.random() * 8) + 2; 
+                    return { text: `${a.toFixed(1)} × ${b} ＝`, ans: (Math.round(a * b * 10) / 10).toFixed(1) };
+                }
+                if (level === "3") {
+                    // 発展：小数 ÷ 1桁の整数・割り切れる
+                    let b = Math.floor(Math.random() * 8) + 2; 
+                    let ansVal = (Math.floor(Math.random() * 9) + 1) / 10; 
+                    let a = Math.round(ansVal * b * 10) / 10; 
+                    return { text: `${a.toFixed(1)} ÷ ${b} ＝`, ans: ansVal.toFixed(1) };
+                }
+                if (level === "4") {
+                    // 最高峰：【1列化】小数 ÷ 2桁の整数・あまりのある割り算
+                    let divisor = Math.floor(Math.random() * 15) + 11; 
+                    let quotient = Math.floor(Math.random() * 5) + 2; 
+                    let remainder = (Math.floor(Math.random() * 5) + 1) / 10; 
+                    let dividend = Math.round((divisor * quotient + remainder) * 10) / 10; 
+                    
+                    const qHTML = `<div style="line-height:1.5;">${dividend.toFixed(1)} ÷ ${divisor} ＝</div>`;
+                    return { text: qHTML, ans: `${quotient} あまり ${remainder.toFixed(1)}`, isHTML: true };
+                }
+            }
+
+            if (unit === "同分母の分数計算") {
+                let d = Math.floor(Math.random() * 5) + 5; // 分母を5〜9で固定
+                
+                // 【新仕様】帯分数・真分数・仮分数のすべてに対応する分数HTML生成関数
+                // w: 整数部分(0なら表示なし), n: 分子, den: 分母
+                const f = (w, n, den) => {
+                    if (w === 0) return `<span class="fraction"><span class="numerator">${n}</span><span class="denominator">${den}</span></span>`;
+                    return `<span class="fraction-whole">${w}</span><span class="fraction"><span class="numerator">${n}</span><span class="denominator">${den}</span></span>`;
+                };
+
+                if (level === "1") { 
+                    // 基礎：たし算・ひき算（答えが1を超える仮分数、または帯分数化しない表記）
+                    let a = Math.floor(Math.random() * 4) + 3; // 分子1 (3〜6)
+                    let b = Math.floor(Math.random() * 4) + 2; // 分子2 (2〜5)
+                    if (Math.random() > 0.5) {
+                        return { text: `${f(0, a, d)} ＋ ${f(0, b, d)} ＝`, ans: f(0, a+b, d) };
+                    } else {
+                        let max = Math.max(a, b); let min = Math.min(a, b);
+                        if (max === min) max++;
+                        return { text: `${f(0, max, d)} － ${f(0, min, d)} ＝`, ans: f(0, max-min, d) };
+                    }
+                }
+                if (level === "2") { 
+                    // 応用：帯分数が絡む足し引き（くり上がり・下がりあり）
+                    let basicA = Math.floor(Math.random() * 2) + 1; // 整数部1〜2
+                    let basicB = Math.floor(Math.random() * 2) + 1; // 整数部1〜2
+                    let numA = Math.floor(Math.random() * 3) + 3;   // 分子A (3〜5)
+                    let numB = Math.floor(Math.random() * 3) + 3;   // 分子B (3〜5)
+                    while (numA + numB <= d) { numB = Math.floor(Math.random() * 3) + 3; } // 繰り上がり発生させる
+                    
+                    if (Math.random() > 0.5) {
+                        let totalImproperNum = numA + numB;
+                        let extraWhole = Math.floor(totalImproperNum / d);
+                        let finalNum = totalImproperNum % d;
+                        let finalWhole = basicA + basicB + extraWhole;
+                        let ansStr = finalNum === 0 ? `${finalWhole}` : f(finalWhole, finalNum, d);
+                        return { text: `${f(basicA, numA, d)} ＋ ${f(basicB, numB, d)} ＝`, ans: ansStr };
+                    } else {
+                        // 繰り下がりのある引き算 (例: 3と1/5 - 1と3/5)
+                        let wholeA = 3; let wholeB = 1;
+                        let nA = 1; let nB = 3;
+                        return { text: `${f(wholeA, nA, d)} － ${f(wholeB, nB, d)} ＝`, ans: f(wholeA - wholeB - 1, d + nA - nB, d) };
+                    }
+                }
+                if (level === "3") { 
+                    // 虫食い算：□に入る分数
+                    let a = Math.floor(Math.random() * 2) + 1;
+                    return { text: `${f(0, a, d)} ＋ □ ＝ ${f(1, 2, d)}`, ans: f(0, d + 2 - a, d) };
+                }
+                if (level === "4") { 
+                    // 発展：整数から帯分数を引く計算（例: 3 － 1と2/7 ＝）
+                    let whole = Math.floor(Math.random() * 3) + 3; // 3〜5
+                    let subWhole = Math.floor(Math.random() * 2) + 1; // 1〜2
+                    let subNum = Math.floor(Math.random() * (d - 2)) + 1;
+                    let ansWhole = whole - subWhole - 1;
+                    let ansNum = d - subNum;
+                    return { text: `${whole} － ${f(subWhole, subNum, d)} ＝`, ans: f(ansWhole, ansNum, d) };
+                }
+            }
+
+            if (unit === "四則計算の結果の見積もり") {
+                if (level === "1") { 
+                    // 基礎：百の位までの概数（四捨五入して何百にするか明記）
+                    let n1 = Math.floor(Math.random() * 400) + 212; 
+                    let n2 = Math.floor(Math.random() * 300) + 115; 
+                    let approx1 = Math.round(n1 / 100) * 100;
+                    let approx2 = Math.round(n2 / 100) * 100;
+                    if (Math.random() > 0.5) {
+                        return { text: `${n1} ＋ ${n2} を［四捨五入して百の位までの概数］にして計算しましょう。`, ans: `およそ ${approx1 + approx2}` };
+                    } else {
+                        let max = Math.max(approx1, approx2); let min = Math.min(approx1, approx2);
+                        if (max === min) max += 200;
+                        return { text: `${max + 14} － ${min - 12} を［四捨五入して百の位までの概数］にして計算しましょう。`, ans: `およそ ${max - min}` };
+                    }
+                }
+                if (level === "2") { 
+                    // 【修正】教科書の正しい表現「上から1桁の概数」に基づきロジック・文言を厳密化
+                    let n1 = Math.floor(Math.random() * 70) + 25; // 25〜95
+                    let n2 = Math.floor(Math.random() * 70) + 25; 
+                    let approx1 = Math.round(n1 / 10) * 10; // 上から2桁目を四捨五入して1桁の概数にする
+                    let approx2 = Math.round(n2 / 10) * 10;
+                    return { text: `${n1} × ${n2} を［四捨五入して上から1桁の概数］にして計算しましょう。`, ans: `およそ ${approx1 * approx2}` };
+                }
+                if (level === "3") { 
+                    // 【難易度底上げ】単純な引き算で解けない、概数の仕組みと思候力を問う虫食い見積もり問題
+                    const type = Math.floor(Math.random() * 3);
+                    if (type === 0) {
+                        // パターンA: たし算の概数見積もり
+                        let boxApprox = (Math.floor(Math.random() * 4) + 2) * 100; // 200〜500
+                        let num = Math.floor(Math.random() * 200) + 150; // 150〜349
+                        let numApprox = Math.round(num / 100) * 100;
+                        let goal = boxApprox + numApprox;
+                        return { text: `□と${num}を、それぞれ［百の位までの概数］にしてからたすと、答えはおよそ${goal}になります。□に入るおよその数は？`, ans: `およそ ${boxApprox}` };
+                    } else if (type === 1) {
+                        // パターンB: ひき算の概数見積もり
+                        let boxApprox = (Math.floor(Math.random() * 4) + 5) * 100; // 500〜800
+                        let num = Math.floor(Math.random() * 200) + 150; // 150〜349
+                        let numApprox = Math.round(num / 100) * 100;
+                        let goal = boxApprox - numApprox;
+                        return { text: `□から${num}を、それぞれ［百の位までの概数］にしてからひくと、答えはおよそ${goal}になります。□に入るおよその数は？`, ans: `およそ ${boxApprox}` };
+                    } else {
+                        // パターンC: かけ算（上から1桁の概数）の見積もり
+                        let boxApprox = (Math.floor(Math.random() * 5) + 2) * 10; // 20〜60
+                        let num = Math.floor(Math.random() * 20) + 15; // 15〜34
+                        let numApprox = Math.round(num / 10) * 10;
+                        let goal = boxApprox * numApprox;
+                        return { text: `□と${num}を、それぞれ［上から1桁の概数］にしてからかけると、答えはおよそ${goal}になります。□に入るおよその数は？`, ans: `およそ ${boxApprox}` };
+                    }
+                }
+                if (level === "4") { 
+                    // 固定：万の位までの概数（四捨五入する位を明記）
+                    let n1 = Math.floor(Math.random() * 40000) + 25000; 
+                    let n2 = Math.floor(Math.random() * 15000) + 12000; 
+                    let approx1 = Math.round(n1 / 10000) * 10000;
+                    let approx2 = Math.round(n2 / 10000) * 10000;
+                    return { text: `${n1} ＋ ${n2} を［四捨五入して万の位までの概数］にして計算しましょう。`, ans: `およそ ${(approx1 + approx2) / 10000}万` };
+                }
+            }
+
+
+
+
+
+            // ==========================================
+            // 小学5年生の単元ロジック（解答欄改行配置・3数混合対応版）
+            // ==========================================
+
+            // 1. 小数のかけ算
+            if (unit === "小数のかけ算") {
+                let a, b, calculatedAns;
+                if (level === "1") { 
+                    // 基礎：(2桁の整数) × (1桁の小数: 0.x)
+                    a = Math.floor(Math.random() * 90) + 10;
+                    b = (Math.floor(Math.random() * 9) + 1) / 10;
+                    calculatedAns = parseFloat((a * b).toFixed(1));
+                    return { text: `${a} × ${b.toFixed(1)} ＝`, ans: String(calculatedAns) };
+                }
+                if (level === "2") { 
+                    // 応用：(1桁の小数) × (1桁の小数)
+                    a = (Math.floor(Math.random() * 9) + 1) / 10;
+                    b = (Math.floor(Math.random() * 9) + 1) / 10;
+                    calculatedAns = parseFloat((a * b).toFixed(2));
+                    return { text: `${a.toFixed(1)} × ${b.toFixed(1)} ＝`, ans: String(calculatedAns) };
+                }
+                if (level === "3") { 
+                    // 応用：(2桁の整数) × (2桁の小数: x.x)
+                    a = Math.floor(Math.random() * 90) + 10;
+                    b = (Math.floor(Math.random() * 89) + 11) / 10;
+                    calculatedAns = parseFloat((a * b).toFixed(1));
+                    return { text: `${a} × ${b.toFixed(1)} ＝`, ans: String(calculatedAns) };
+                }
+                if (level === "4") { 
+                    // 工夫計算パターン
+                    const pattern = Math.floor(Math.random() * 4);
+                    let formulaText = "";
+                    let ansVal = "";
+                    
+                    if (pattern === 0) {
+                        const list0 = [{a:2.5, b:0.4}, {a:1.2, b:1.5}, {a:0.8, b:0.5}, {a:4.5, b:0.2}];
+                        const p = list0[Math.floor(Math.random() * list0.length)];
+                        formulaText = `${p.a.toFixed(1)} × ${p.b.toFixed(1)}`;
+                        ansVal = String(parseFloat((p.a * p.b).toFixed(1)));
+                    }
+                    else if (pattern === 1) {
+                        const list1 = [{a:0.25, b:4}, {a:0.75, b:4}, {a:0.12, b:25}, {a:0.05, b:20}];
+                        const p = list1[Math.floor(Math.random() * list1.length)];
+                        formulaText = `${p.a.toFixed(2)} × ${p.b}`;
+                        ansVal = String(parseFloat((p.a * p.b).toFixed(1)));
+                    }
+                    else if (pattern === 2) {
+                        let base = (Math.floor(Math.random() * 9) + 1) / 10;
+                        if (Math.random() > 0.5) {
+                            formulaText = `2.5 × ${base.toFixed(1)} × 4`;
+                            ansVal = String(parseFloat((2.5 * base * 4).toFixed(1)));
+                        } else {
+                            formulaText = `0.4 × ${base.toFixed(1)} × 25`;
+                            ansVal = String(parseFloat((0.4 * base * 25).toFixed(1)));
+                        }
+                    }
+                    else {
+                        let c = (Math.floor(Math.random() * 8) + 2) / 10;
+                        let aVal = Math.floor(Math.random() * 5) + 1;
+                        let bVal = 10 - aVal;
+                        formulaText = `${aVal} × ${c.toFixed(1)} ＋ ${bVal} × ${c.toFixed(1)}`;
+                        ansVal = String(parseFloat((10 * c).toFixed(1)));
+                    }
+
+                    // 【はみ出し完全解消】数式の下に改行（<br>）を入れて、美しい解答用の下線を配置
+                    const qHTML = `<div style="display:inline-block; vertical-align:top; white-space:nowrap; line-height:1.4;">${formulaText} ＝<br><span style="display:inline-block; width:80px; border-bottom:1px solid #000; margin-left:30px; height:20px;"></span></div>`;
+                    return { text: qHTML, ans: ansVal, isHTML: true };
+                }
+            }
+
+            // 2. 小数のわり算
+            if (unit === "小数のわり算") {
+                let a, b, calculatedAns;
+                if (level === "1") { 
+                    // 基礎：(整数) ÷ (1桁の小数) で商が整数
+                    calculatedAns = Math.floor(Math.random() * 9) + 2; 
+                    b = (Math.floor(Math.random() * 9) + 1) / 10; 
+                    a = parseFloat((calculatedAns * b).toFixed(2));
+                    return { text: `${a.toFixed(1)} ÷ ${b.toFixed(1)} ＝`, ans: String(calculatedAns) };
+                }
+                if (level === "2") { 
+                    // 応用：(2桁の小数) ÷ (1桁の小数) で商が1桁の小数
+                    calculatedAns = (Math.floor(Math.random() * 9) + 1) / 10; 
+                    b = (Math.floor(Math.random() * 9) + 1) / 10; 
+                    a = parseFloat((calculatedAns * b).toFixed(2));
+                    return { text: `${a.toFixed(2)} ÷ ${b.toFixed(1)} ＝`, ans: String(calculatedAns.toFixed(1)) };
+                }
+                if (level === "3") { 
+                    // 応用：(整数) ÷ (1桁の小数) で「わり進む」タイプ (商が小数になる)
+                    b = (Math.floor(Math.random() * 8) + 2) / 10; 
+                    calculatedAns = (Math.floor(Math.random() * 40) + 11) / 10; 
+                    a = parseFloat((calculatedAns * b).toFixed(2));
+                    return { text: `${a.toFixed(1)} ÷ ${b.toFixed(1)} ＝`, ans: String(calculatedAns.toFixed(1)) };
+                }
+                if (level === "4") { 
+                    // 発展：(小数) ÷ (2桁の小数: 0.xx) で商が整数
+                    calculatedAns = Math.floor(Math.random() * 8) + 2; 
+                    b = (Math.floor(Math.random() * 89) + 11) / 100; 
+                    a = parseFloat((calculatedAns * b).toFixed(3));
+                    return { text: `${a.toFixed(2)} ÷ ${b.toFixed(2)} ＝`, ans: String(calculatedAns) };
+                }
+            }
+
+            // 3. 異分母の通分・分数計算
+            if (unit === "異分母の通分・分数計算") {
+                const getGCD = (x, y) => (y === 0 ? x : getGCD(y, x % y));
+                const getLCM = (x, y) => (x * y) / getGCD(x, y);
+                
+                const f = (w, n, den) => {
+                    if (w === 0) return `<span class="fraction"><span class="numerator">${n}</span><span class="denominator">${den}</span></span>`;
+                    return `<span class="fraction-whole">${w}</span><span class="fraction"><span class="numerator">${n}</span><span class="denominator">${den}</span></span>`;
+                };
+
+                if (level === "1" || level === "2") {
+                    let d1, d2, n1, n2, op;
+                    op = (level === "1") ? '＋' : '－'; 
+
+                    while (true) {
+                        d1 = Math.floor(Math.random() * 8) + 2; 
+                        d2 = Math.floor(Math.random() * 8) + 2; 
+                        if (d1 === d2) continue; 
+                        n1 = Math.floor(Math.random() * (d1 - 1)) + 1; 
+                        n2 = Math.floor(Math.random() * (d2 - 1)) + 1; 
+                        if (op === '－' && (n1 / d1 <= n2 / d2)) continue; 
+                        break;
+                    }
+
+                    const lcm = getLCM(d1, d2);
+                    let ansNum = (op === '＋') ? (n1 * (lcm / d1) + n2 * (lcm / d2)) : (n1 * (lcm / d1) - n2 * (lcm / d2));
+                    let ansDen = lcm;
+                    const gcd = getGCD(ansNum, ansDen);
+                    ansNum /= gcd; ansDen /= gcd;
+
+                    let ansStr = (ansNum === ansDen) ? '1' : (ansNum > ansDen) ? f(Math.floor(ansNum / ansDen), ansNum % ansDen, ansDen) : f(0, ansNum, ansDen);
+                    return { text: `${f(0, n1, d1)} ${op} ${f(0, n2, d2)} ＝`, ans: ansStr, isHTML: true };
+                }
+                
+                if (level === "3") {
+                    let w1 = Math.floor(Math.random() * 2) + 2; 
+                    let w2 = 1;
+                    let d1 = 2, d2 = 3; 
+                    if (Math.random() > 0.5) { d1 = 3; d2 = 4; }
+                    
+                    let n1 = Math.floor(Math.random() * (d1 - 1)) + 1;
+                    let n2 = Math.floor(Math.random() * (d2 - 1)) + 1;
+                    let op = Math.random() > 0.5 ? '＋' : '－';
+
+                    if (op === '＋') {
+                        while ((n1 / d1 + n2 / d2) < 1) {
+                            n1 = Math.floor(Math.random() * (d1 - 1)) + 1;
+                            n2 = Math.floor(Math.random() * (d2 - 1)) + 1;
+                        }
+                        const lcm = getLCM(d1, d2);
+                        let totalNum = (w1 * lcm) + (n1 * (lcm / d1)) + (w2 * lcm) + (n2 * (lcm / d2));
+                        let ansDen = lcm;
+                        const gcd = getGCD(totalNum, ansDen);
+                        totalNum /= gcd; ansDen /= gcd;
+                        let ansStr = (totalNum % ansDen === 0) ? `${totalNum / ansDen}` : f(Math.floor(totalNum / ansDen), totalNum % ansDen, ansDen);
+                        return { text: `${f(w1, n1, d1)} ＋ ${f(w2, n2, d2)} ＝`, ans: ansStr, isHTML: true };
+                    } else {
+                        while ((n1 / d1) >= (n2 / d2)) {
+                            n1 = Math.floor(Math.random() * (d1 - 1)) + 1;
+                            n2 = Math.floor(Math.random() * (d2 - 1)) + 1;
+                        }
+                        const lcm = getLCM(d1, d2);
+                        let totalNum = ((w1 * lcm) + (n1 * (lcm / d1))) - ((w2 * lcm) + (n2 * (lcm / d2)));
+                        let ansDen = lcm;
+                        const gcd = getGCD(totalNum, ansDen);
+                        totalNum /= gcd; ansDen /= gcd;
+                        let ansStr = (totalNum % ansDen === 0) ? `${totalNum / ansDen}` : f(Math.floor(totalNum / ansDen), totalNum % ansDen, ansDen);
+                        return { text: `${f(w1, n1, d1)} － ${f(w2, n2, d2)} ＝`, ans: ansStr, isHTML: true };
+                    }
+                }
+
+                if (level === "4") {
+                    const trios = [
+                        {d1: 2, d2: 3, d3: 4, lcm: 12},
+                        {d1: 3, d2: 4, d3: 6, lcm: 12},
+                        {d1: 2, d2: 4, d3: 5, lcm: 20},
+                        {d1: 2, d2: 3, d3: 6, lcm: 6}
+                    ];
+                    const t = trios[Math.floor(Math.random() * trios.length)];
+                    let n1 = Math.floor(Math.random() * (t.d1 - 1)) + 1;
+                    let n2 = Math.floor(Math.random() * (t.d2 - 1)) + 1;
+                    let n3 = Math.floor(Math.random() * (t.d3 - 1)) + 1;
+                    
+                    let op1 = Math.random() > 0.5 ? '＋' : '－';
+                    let op2 = Math.random() > 0.5 ? '＋' : '－';
+                    
+                    let v1 = n1 * (t.lcm / t.d1);
+                    let v2 = n2 * (t.lcm / t.d2);
+                    let v3 = n3 * (t.lcm / t.d3);
+                    
+                    let intermediate = (op1 === '＋') ? (v1 + v2) : (v1 - v2);
+                    if (intermediate <= 0) { op1 = '＋'; intermediate = v1 + v2; }
+                    
+                    let finalVal = (op2 === '＋') ? (intermediate + v3) : (intermediate - v3);
+                    if (finalVal <= 0) { op2 = '＋'; finalVal = intermediate + v3; }
+                    
+                    let ansDen = t.lcm;
+                    const gcd = getGCD(finalVal, ansDen);
+                    finalVal /= gcd; ansDen /= gcd;
+                    
+                    let ansStr = (finalVal === ansDen) ? '1' : (finalVal > ansDen) ? f(Math.floor(finalVal / ansDen), finalVal % ansDen, ansDen) : f(0, finalVal, ansDen);
+                    return { text: `${f(0, n1, t.d1)} ${op1} ${f(0, n2, t.d2)} ${op2} ${f(0, n3, t.d3)} ＝`, ans: ansStr, isHTML: true };
+                }
+            }
+
+            // 【新設単元】小数と分数のまじった計算（基礎）
+            if (unit === "小数と分数のまじった計算（基礎）") {
+                if (level === "1") {
+                    // 基礎：分数に直しやすい小数との加減・通分なし（0.5 ＝ 1/2 との計算）
+                    if (Math.random() < 0.5) {
+                        return { text: `0.5 ＋ ${f(0, 1, 2)} ＝`, ans: "1" };
+                    } else {
+                        return { text: `${f(0, 3, 2)} － 0.5 ＝`, ans: "1" };
+                    }
+                }
+                if (level === "2") {
+                    // 応用：基本的な小数（0.25=1/4, 0.75=3/4）と異分母分数の加減
+                    if (Math.random() < 0.5) {
+                        return { text: `0.25 ＋ ${f(0, 1, 3)} ＝`, ans: f(0, 7, 12) };
+                    } else {
+                        return { text: `0.75 － ${f(0, 1, 2)} ＝`, ans: f(0, 1, 4) };
+                    }
+                }
+                if (level === "3") {
+                    // 発展：帯分数や3つの数がまじった加減
+                    return { text: `1.5 ＋ ${f(1, 1, 3)} ＝`, ans: f(2, 5, 6) };
+                }
+                if (level === "4") {
+                    // 最高峰：□を求める小数分数の虫食い算
+                    return { text: `□ ＋ ${f(0, 1, 5)} ＝ 0.5`, ans: f(0, 3, 10) };
+                }
+            }
+
+            // 【新設単元】単位の換算と計算
+            if (unit === "単位の換算と計算") {
+                if (level === "1") {
+                    // 基礎：長さの換算を伴う計算（km / m / cm）
+                    let km = (Math.floor(Math.random() * 5) + 1) / 10;
+                    let m = Math.floor(Math.random() * 400) + 100;
+                    return { text: `${km.toFixed(1)}km ＋ ${m}m ＝ □ m`, ans: String(km * 1000 + m) };
+                }
+                if (level === "2") {
+                    // 応用：重さの換算を伴う計算（kg / g）
+                    let kg = (Math.floor(Math.random() * 15) + 11) / 10;
+                    let g = Math.floor(Math.random() * 400) + 100;
+                    return { text: `${kg.toFixed(1)}kg － ${g}g ＝ □ g`, ans: String(kg * 1000 - g) };
+                }
+                if (level === "3") {
+                    // 発展：かさの換算を伴う計算（L / dL / mL）
+                    let L = Math.floor(Math.random() * 3) + 1;
+                    let mL = (Math.floor(Math.random() * 5) + 1) * 100;
+                    let ansDL = (L * 1000 - mL) / 100;
+                    return { text: `${L}L － ${mL}mL ＝ □ dL`, ans: String(ansDL) };
+                }
+                if (level === "4") {
+                    // 最高峰：長さ・重さ・かさの複雑な四則混合換算
+                    const qHTML = `<div style="line-height:1.5;">1.25kg ＋ 750g ＝ □ kg</div>`;
+                    return { text: qHTML, ans: "2", isHTML: true };
+                }
+            }
+
+            // 4. 公倍数・公約数の暗算（1列レイアウト専用・左右美整列版）
+            if (unit === "公倍数・公約数の暗算") {
+                const getGCD = (x, y) => (y === 0 ? x : getGCD(y, x % y));
+                const getLCM = (x, y) => (x * y) / getGCD(x, y);
+
+                let qText, calculatedAns;
+                let isLcmMode = true; 
+                
+                if (level === "1") {
+                    isLcmMode = true;
+                } else if (level === "2") {
+                    isLcmMode = false;
+                } else if (level === "3") {
+                    isLcmMode = Math.random() > 0.5;
+                } else if (level === "4") {
+                    isLcmMode = Math.random() > 0.5;
+                }
+
+                if (level !== "4") {
+                    let a, b;
+                    if (isLcmMode) {
+                        while(true) {
+                            a = Math.floor(Math.random() * 10) + 2; 
+                            b = Math.floor(Math.random() * 10) + 2;
+                            if (a === b) continue;
+                            const lcm = getLCM(a, b);
+                            if (lcm <= 60) break; 
+                        }
+                        qText = `（${a}，${b}）の最小公倍数 ＝`;
+                        calculatedAns = String(getLCM(a, b));
+                    } else {
+                        while(true) {
+                            a = Math.floor(Math.random() * 35) + 6; 
+                            b = Math.floor(Math.random() * 35) + 6;
+                            if (a === b) continue;
+                            if (getGCD(a, b) > 1) break; 
+                        }
+                        qText = `（${a}，${b}）の最大公約数 ＝`;
+                        calculatedAns = String(getGCD(a, b));
+                    }
+                } else {
+                    if (isLcmMode) {
+                        const lcmTrios = [
+                            {a:2, b:3, c:4, ans:12}, {a:3, b:4, c:6, ans:12}, {a:2, b:4, c:6, ans:12},
+                            {a:4, b:6, c:8, ans:24}, {a:3, b:5, c:6, ans:30}, {a:2, b:6, c:9, ans:18},
+                            {a:4, b:8, c:12, ans:24}, {a:2, b:5, c:10, ans:10}, {a:3, b:6, c:8, ans:24}
+                        ];
+                        const t = lcmTrios[Math.floor(Math.random() * lcmTrios.length)];
+                        qText = `（${t.a}，${t.b}，${t.c}）の最小公倍数 ＝`;
+                        calculatedAns = String(t.ans);
+                    } else {
+                        const gcdTrios = [
+                            {a:8, b:12, c:16, ans:4}, {a:12, b:18, c:24, ans:6}, {a:9, b:15, c:21, ans:3},
+                            {a:10, b:20, c:30, ans:10}, {a:14, b:21, c:28, ans:7}, {a:16, b:24, c:32, ans:8},
+                            {a:12, b:16, c:20, ans:4}, {a:18, b:27, c:36, ans:9}, {a:6, b:12, c:18, ans:6}
+                        ];
+                        const t = gcdTrios[Math.floor(Math.random() * gcdTrios.length)];
+                        qText = `（${t.a}，${t.b}，${t.c}）の最大公約数 ＝`;
+                        calculatedAns = String(t.ans);
+                    }
+                }
+
+                // 【1列専用極上レイアウト】flexを用いて、右端に150pxの美しい書き込み用アンダーラインを配置
+                const qHTML = `<span style="display:inline-flex; justify-content:space-between; align-items:center; width:85%; white-space:nowrap;"><span>${qText}</span><span style="display:inline-block; width:150px; border-bottom:1px solid #000; height:18px; margin-left:15px;"></span></span>`;
+                return { text: qHTML, ans: calculatedAns, isHTML: true };
+            }
+
+
+
+
+
+            // ==========================================
+            // 小学6年生の単元ロジック
+            // ==========================================
+
+            // 1. 分数のかけ算
+            if (unit === "分数のかけ算") {
+                const getGCD = (x, y) => (y === 0 ? x : getGCD(y, x % y));
+                const f = (w, n, den) => {
+                    if (w === 0) return `<span class="fraction"><span class="numerator">${n}</span><span class="denominator">${den}</span></span>`;
+                    return `<span class="fraction-whole">${w}</span><span class="fraction"><span class="numerator">${n}</span><span class="denominator">${den}</span></span>`;
+                };
+
+                let w1=0, d1, n1, w2=0, d2, n2;
+                
+                if (level === "1") {
+                    // 基礎：(分数) × (整数) 
+                    d1 = Math.floor(Math.random() * 6) + 4; // 分母4〜9
+                    n1 = Math.floor(Math.random() * (d1 - 1)) + 1;
+                    let integerB = Math.floor(Math.random() * 5) + 2; // 整数2〜6
+                    
+                    let ansNum = n1 * integerB;
+                    let ansDen = d1;
+                    const gcd = getGCD(ansNum, ansDen);
+                    ansNum /= gcd; ansDen /= gcd;
+                    
+                    let ansStr = (ansNum % ansDen === 0) ? `${ansNum / ansDen}` : f(Math.floor(ansNum / ansDen), ansNum % ansDen, ansDen);
+                    return { text: `${f(0, n1, d1)} × ${integerB} ＝`, ans: ansStr, isHTML: true };
+                }
+                if (level === "2") {
+                    // 応用：(分数) × (分数) ※途中で約分ができる相性の良いペア
+                    while (true) {
+                        d1 = Math.floor(Math.random() * 8) + 2; // 2〜9
+                        d2 = Math.floor(Math.random() * 8) + 2;
+                        n1 = Math.floor(Math.random() * (d1 - 1)) + 1;
+                        n2 = Math.floor(Math.random() * (d2 - 1)) + 1;
+                        // 斜めの約分（n1とd2、またはn2とd1）が発生する組み合わせに限定
+                        if (getGCD(n1, d2) > 1 || getGCD(n2, d1) > 1) break;
+                    }
+                    let ansNum = n1 * n2; let ansDen = d1 * d2;
+                    const gcd = getGCD(ansNum, ansDen);
+                    ansNum /= gcd; ansDen /= gcd;
+                    let ansStr = (ansNum === ansDen) ? '1' : f(0, ansNum, ansDen);
+                    return { text: `${f(0, n1, d1)} × ${f(0, n2, d2)} ＝`, ans: ansStr, isHTML: true };
+                }
+                if (level === "3") {
+                    // 発展：(帯分数) × (分数 または 帯分数)
+                    w1 = Math.floor(Math.random() * 2) + 1; // 1〜2
+                    d1 = Math.floor(Math.random() * 4) + 2; // 2〜5
+                    n1 = Math.floor(Math.random() * (d1 - 1)) + 1;
+                    
+                    d2 = Math.floor(Math.random() * 4) + 2;
+                    n2 = Math.floor(Math.random() * (d2 - 1)) + 1;
+                    if (Math.random() > 0.5) w2 = 1; // 確率で後ろも帯分数に
+
+                    let impNum1 = w1 * d1 + n1;
+                    let impNum2 = w2 * d2 + n2;
+                    
+                    let ansNum = impNum1 * impNum2; let ansDen = d1 * d2;
+                    const gcd = getGCD(ansNum, ansDen);
+                    ansNum /= gcd; ansDen /= gcd;
+                    
+                    let ansStr = (ansNum % ansDen === 0) ? `${ansNum / ansDen}` : f(Math.floor(ansNum / ansDen), ansNum % ansDen, ansDen);
+                    return { text: `${f(w1, n1, d1)} × ${f(w2, n2, d2)} ＝`, ans: ansStr, isHTML: true };
+                }
+                if (level === "4") {
+                    // 【作業化防止】3つの数の分数かけ算、または小数と分数の混ざったかけ算の2パターンランダム
+                    if (Math.random() > 0.5) {
+                        // パターンA: 3つの分数のかけ算
+                        d1 = 2; d2 = 3; let d3 = 5;
+                        n1 = 1; n2 = 2; let n3 = 3; 
+                        let ansNum = n1 * n2 * n3; let ansDen = d1 * d2 * d3;
+                        const gcd = getGCD(ansNum, ansDen);
+                        ansNum /= gcd; ansDen /= gcd;
+                        return { text: `${f(0, 3, 4)} × ${f(0, 2, 5)} × ${f(0, 5, 6)} ＝`, ans: f(0, 1, 4), isHTML: true }; 
+                    } else {
+                        // パターンB: 小数と分数のかけ算
+                        const decimalList = [{dec: "0.25", n:1, d:4}, {dec: "0.5", n:1, d:2}, {dec: "0.4", n:2, d:5}, {dec: "0.75", n:3, d:4}];
+                        const p = decimalList[Math.floor(Math.random() * decimalList.length)];
+                        d2 = Math.floor(Math.random() * 4) + 2;
+                        n2 = Math.floor(Math.random() * (d2 - 1)) + 1;
+                        
+                        let ansNum = p.n * n2; let ansDen = p.d * d2;
+                        const gcd = getGCD(ansNum, ansDen);
+                        ansNum /= gcd; ansDen /= gcd;
+                        let ansStr = (ansNum === ansDen) ? '1' : f(0, ansNum, ansDen);
+                        return { text: `${p.dec} × ${f(0, n2, d2)} ＝`, ans: ansStr, isHTML: true };
+                    }
+                }
+            }
+
+            // 2. 分数のわり算
+            if (unit === "分数のわり算") {
+                const getGCD = (x, y) => (y === 0 ? x : getGCD(y, x % y));
+                const f = (w, n, den) => {
+                    if (w === 0) return `<span class="fraction"><span class="numerator">${n}</span><span class="denominator">${den}</span></span>`;
+                    return `<span class="fraction-whole">${w}</span><span class="fraction"><span class="numerator">${n}</span><span class="denominator">${den}</span></span>`;
+                };
+
+                let w1=0, d1, n1, w2=0, d2, n2;
+
+                if (level === "1") {
+                    // 基礎：(分数) ÷ (整数)
+                    d1 = Math.floor(Math.random() * 5) + 3; // 3〜7
+                    n1 = Math.floor(Math.random() * (d1 - 1)) + 1;
+                    let integerB = Math.floor(Math.random() * 3) + 2; // 2〜4
+                    
+                    let ansNum = n1;
+                    let ansDen = d1 * integerB;
+                    const gcd = getGCD(ansNum, ansDen);
+                    ansNum /= gcd; ansDen /= gcd;
+                    
+                    return { text: `${f(0, n1, d1)} ÷ ${integerB} ＝`, ans: f(0, ansNum, ansDen), isHTML: true };
+                }
+                if (level === "2") {
+                    // 応用：(分数) ÷ (分数) ※逆数をかけて計算
+                    while (true) {
+                        d1 = Math.floor(Math.random() * 6) + 2; 
+                        d2 = Math.floor(Math.random() * 6) + 2;
+                        n1 = Math.floor(Math.random() * (d1 - 1)) + 1;
+                        n2 = Math.floor(Math.random() * (d2 - 1)) + 1;
+                        if (d1 !== d2 && n1 !== n2) break;
+                    }
+                    let ansNum = n1 * d2; let ansDen = d1 * n2;
+                    const gcd = getGCD(ansNum, ansDen);
+                    ansNum /= gcd; ansDen /= gcd;
+                    
+                    let ansStr = (ansNum % ansDen === 0) ? `${ansNum / ansDen}` : f(Math.floor(ansNum / ansDen), ansNum % ansDen, ansDen);
+                    return { text: `${f(0, n1, d1)} ÷ ${f(0, n2, d2)} ＝`, ans: ansStr, isHTML: true };
+                }
+                if (level === "3") {
+                    // 発展：(帯分数) ÷ (分数 または 帯分数)
+                    w1 = Math.floor(Math.random() * 2) + 1;
+                    d1 = Math.floor(Math.random() * 3) + 2; // 2〜4
+                    n1 = Math.floor(Math.random() * (d1 - 1)) + 1;
+                    
+                    d2 = Math.floor(Math.random() * 3) + 2;
+                    n2 = Math.floor(Math.random() * (d2 - 1)) + 1;
+                    
+                    let impNum1 = w1 * d1 + n1;
+                    let ansNum = impNum1 * d2; let ansDen = d1 * n2;
+                    const gcd = getGCD(ansNum, ansDen);
+                    ansNum /= gcd; ansDen /= gcd;
+                    
+                    let ansStr = (ansNum % ansDen === 0) ? `${ansNum / ansDen}` : f(Math.floor(ansNum / ansDen), ansNum % ansDen, ansDen);
+                    return { text: `${f(w1, n1, d1)} ÷ ${f(0, n2, d2)} ＝`, ans: ansStr, isHTML: true };
+                }
+                if (level === "4") {
+                    // 【再設計：1列レイアウト連動】かけ算とわり算が混ざった3つの分数の複合計算
+                    const triplePatterns = [
+                        { text: `${f(0,1,3)} × ${f(0,2,5)} ÷ ${f(0,4,9)} ＝`, ans: f(0,3,10) },
+                        { text: `${f(0,3,8)} ÷ ${f(0,9,10)} × ${f(0,4,5)} ＝`, ans: f(0,1,3) },
+                        { text: `${f(0,5,6)} ÷ ${f(0,2,3)} ÷ ${f(0,1,4)} ＝`, ans: "5" },
+                        { text: `${f(0,7,12)} × ${f(0,6,7)} ÷ ${f(0,3,4)} ＝`, ans: f(0,2,3) }
+                    ];
+                    const p = triplePatterns[Math.floor(Math.random() * triplePatterns.length)];
+                    return { text: p.text, ans: p.ans, isHTML: true };
+                }
+            }
+
+            // 3. 比の計算
+            if (unit === "比の計算") {
+                const getGCD = (x, y) => (y === 0 ? x : getGCD(y, x % y));
+                
+                if (level === "1") {
+                    // 基礎：比を最も簡単な整数の比にする（2数の公約数で割る）
+                    let baseA = Math.floor(Math.random() * 6) + 2; // 2〜7
+                    let baseB = Math.floor(Math.random() * 6) + 2;
+                    while (getGCD(baseA, baseB) > 1) { baseB = Math.floor(Math.random() * 6) + 2; } // 互いに素にする
+                    
+                    let multiplier = Math.floor(Math.random() * 5) + 3; // 3〜7をかけて問題化
+                    let qA = baseA * multiplier; let qB = baseB * multiplier;
+                    return { text: `${qA} ： ${qB} を最も簡単な比にしましょう。 ＝`, ans: `${baseA} ： ${baseB}` };
+                }
+                if (level === "2") {
+                    // 応用：小数や分数の比を最も簡単な整数の比にする
+                    if (Math.random() > 0.5) {
+                        // 小数の比 (例: 1.2 : 0.8 -> 12 : 8 -> 3 : 2)
+                        let baseA = 3; let baseB = 2; if (Math.random() > 0.5) { baseA = 4; baseB = 3; }
+                        let mul = (Math.floor(Math.random() * 3) + 2) / 10; // 0.2〜0.4
+                        let qA = (baseA * mul).toFixed(1); let qB = (baseB * mul).toFixed(1);
+                        return { text: `${qA} ： ${qB} を最も簡単な比にしましょう。 ＝`, ans: `${baseA} ： ${baseB}` };
+                    } else {
+                        // 分数の比（横並びテキスト形式表記で「：」と美しく配置）
+                        return { text: `1/3 ： 1/4 を最も簡単な比にしましょう。 ＝`, ans: `4 ： 3` };
+                    }
+                }
+                if (level === "3" || level === "4") {
+                    // 【再設計：1列レイアウト連動】等しい比の□を求める計算（逆算）
+                    let baseA = Math.floor(Math.random() * 4) + 2; // 2〜5
+                    let baseB = Math.floor(Math.random() * 4) + 2; 
+                    while (getGCD(baseA, baseB) > 1) { baseB = Math.floor(Math.random() * 4) + 2; }
+                    
+                    let mul = Math.floor(Math.random() * 5) + 3; // 3〜7倍
+                    let bigA = baseA * mul; let bigB = baseB * mul;
+                    
+                    let formula = ""; let targetAns = "";
+                    const pattern = Math.floor(Math.random() * 3);
+                    
+                    if (pattern === 0) {
+                        formula = `${baseA} ： ${baseB} ＝ □ ： ${bigB}`;
+                        targetAns = String(bigA);
+                    } else if (pattern === 1) {
+                        formula = `${baseA} ： ${baseB} ＝ ${bigA} ： □`;
+                        targetAns = String(bigB);
+                    } else {
+                        formula = `□ ： ${bigB} ＝ ${baseA} ： ${baseB}`;
+                        targetAns = String(bigA);
+                    }
+                    
+                    const qHTML = `<span style="display:inline-flex; justify-content:space-between; align-items:center; width:85%; white-space:nowrap;"><span>${formula}</span><span style="display:inline-block; width:150px; border-bottom:1px solid #000; height:18px; margin-left:15px;"></span></span>`;
+                    return { text: qHTML, ans: targetAns, isHTML: true };
+                }
+            }
+
+            // 4. 文字を使った式
+            if (unit === "文字を使った式") {
+                // 中学校への架け橋となる、xやyを使った数量関係の立式とxを求める問題
+                let xVal = Math.floor(Math.random() * 8) + 5; // xの正体 (5〜12)
+                let baseNum = Math.floor(Math.random() * 15) + 10; // 10〜24
+                
+                if (level === "1" || level === "2") {
+                    // 基礎・応用：たし算・ひき算の構造 (例: x + 12 = 20)
+                    let total = xVal + baseNum;
+                    let formula = Math.random() > 0.5 ? `χ ＋ ${baseNum} ＝ ${total}` : `${total} － χ ＝ ${baseNum}`;
+                    return { text: `${formula} のとき、χ にあてはまる数は？ ＝`, ans: String(xVal) };
+                } else {
+                    // 発展：かけ算・わり算の構造 (例: x × 4 = 32)
+                    let multiplier = Math.floor(Math.random() * 4) + 3; // 3〜6
+                    let total = xVal * multiplier;
+                    let formula = Math.random() > 0.5 ? `χ × ${multiplier} ＝ ${total}` : `${total} ÷ χ ＝ ${multiplier}`;
+                    return { text: `${formula} のとき、χ にあてはまる数は？ ＝`, ans: String(xVal) };
+                }
+            }
+
+            // 5. 分数と小数の混合計算（1列レイアウト専用）
+            if (unit === "分数と小数の混合計算") {
+                const getGCD = (x, y) => (y === 0 ? x : getGCD(y, x % y));
+                const f = (w, n, den) => {
+                    if (w === 0) return `<span class="fraction"><span class="numerator">${n}</span><span class="denominator">${den}</span></span>`;
+                    return `<span class="fraction-whole">${w}</span><span class="fraction"><span class="numerator">${n}</span><span class="denominator">${den}</span></span>`;
+                };
+
+                let qText, ansStr;
+
+                if (level === "1") {
+                    // レベル1: 分数と小数の加減
+                    qText = `０.５ ＋ ${f(0, 1, 3)} ＝`;
+                    ansStr = f(0, 5, 6);
+                } else if (level === "2") {
+                    // レベル2: 分数と小数の乗除
+                    qText = `０.２５ × ${f(0, 2, 3)} ＝`;
+                    ansStr = f(0, 1, 6);
+                } else if (level === "3") {
+                    // レベル3: 3つの数の混合
+                    qText = `０.６ ÷ ${f(0, 2, 5)} × ${f(0, 1, 4)} ＝`;
+                    ansStr = f(0, 3, 8);
+                } else {
+                    // レベル4: 分配法則の工夫
+                    qText = `１.４ × ${f(0, 3, 7)} ＋ ０.７ × ${f(0, 3, 7)} ＝`;
+                    ansStr = f(0, 9, 10);
+                }
+
+                const qHTML = `<span style="display:inline-flex; justify-content:space-between; align-items:center; width:85%; white-space:nowrap;"><span>${qText}</span><span style="display:inline-block; width:150px; border-bottom:1px solid #000; height:18px; margin-left:15px;"></span></span>`;
+                return { text: qHTML, ans: ansStr, isHTML: true };
+            }
+
+            // 6. 複雑な四則混合計算（1列レイアウト専用）
+            if (unit === "複雑な四則混合計算") {
+                const f = (w, n, den) => {
+                    if (w === 0) return `<span class="fraction"><span class="numerator">${n}</span><span class="denominator">${den}</span></span>`;
+                    return `<span class="fraction-whole">${w}</span><span class="fraction"><span class="numerator">${n}</span><span class="denominator">${den}</span></span>`;
+                };
+
+                let qText, ansStr;
+
+                if (level === "1") {
+                    // レベル1: カッコのある3数
+                    qText = `（０.５ ＋ ${f(0, 1, 4)}） × ${f(0, 4, 3)} ＝`;
+                    ansStr = "1";
+                } else if (level === "2") {
+                    // レベル2: 4数の四則混合
+                    qText = `${f(0, 2, 3)} × １.５ － ${f(0, 1, 4)} ÷ ０.５ ＝`;
+                    ansStr = f(0, 1, 2);
+                } else if (level === "3") {
+                    // レベル3: □を求める逆算
+                    qText = `□ × ${f(0, 2, 3)} ＋ ０.５ ＝ １.５`;
+                    ansStr = f(1, 1, 2);
+                } else {
+                    // レベル4: 中学受験最難関（3.14の工夫）
+                    qText = `３.１４ × ８ ＋ ３.１４ × ２ ＝`;
+                    ansStr = "31.4";
+                }
+
+                const qHTML = `<span style="display:inline-flex; justify-content:space-between; align-items:center; width:85%; white-space:nowrap;"><span>${qText}</span><span style="display:inline-block; width:150px; border-bottom:1px solid #000; height:18px; margin-left:15px;"></span></span>`;
+                return { text: qHTML, ans: ansStr, isHTML: true };
+            }
+
+            // 【新設単元】比例の関係と代入計算
+            if (unit === "比例の関係と代入計算") {
+                const getGCD = (x, y) => (y === 0 ? x : getGCD(y, x % y));
+                const f = (w, n, den) => {
+                    if (w === 0) return `<span class="fraction"><span class="numerator">${n}</span><span class="denominator">${den}</span></span>`;
+                    return `<span class="fraction-whole">${w}</span><span class="fraction"><span class="numerator">${n}</span><span class="denominator">${den}</span></span>`;
+                };
+                
+                if (level === "1") {
+                    // 基礎：y ＝ 決まった数 × x への整数の代入
+                    let k = Math.floor(Math.random() * 5) + 2; 
+                    let x = Math.floor(Math.random() * 8) + 2; 
+                    return { text: `y ＝ ${k} × x  ［ x ＝ ${x} のときの y ］`, ans: String(k * x) };
+                }
+                if (level === "2") {
+                    // 応用：y ＝ 決まった数 × x への小数の代入
+                    let k = Math.floor(Math.random() * 3) + 2; 
+                    const xDecimals = [1.2, 1.5, 2.5, 0.5, 0.8];
+                    let x = xDecimals[Math.floor(Math.random() * xDecimals.length)];
+                    let ansVal = parseFloat((k * x).toFixed(1));
+                    return { text: `y ＝ ${k} × x  ［ x ＝ ${x.toFixed(1)} のときの y ］`, ans: String(ansVal) };
+                }
+                if (level === "3") {
+                    // 発展：y ＝ 決まった数 × x への分数の代入
+                    let k = Math.floor(Math.random() * 3) + 2; 
+                    let den = Math.random() > 0.5 ? 3 : 5;
+                    let num = Math.floor(Math.random() * (den - 1)) + 1; 
+                    
+                    let ansNum = k * num; let ansDen = den;
+                    const gcd = getGCD(ansNum, ansDen);
+                    ansNum /= gcd; ansDen /= gcd;
+                    
+                    let ansStr = (ansNum % ansDen === 0) ? `${ansNum / ansDen}` : f(Math.floor(ansNum / ansDen), ansNum % ansDen, ansDen);
+                    return { text: `y ＝ ${k} × x  ［ x ＝ ${f(0, num, den)} のときの y ］`, ans: ansStr, isHTML: true };
+                }
+                if (level === "4") {
+                    // 最高峰：【1列化】反比例 y ＝ 決まった数 ÷ x への代入計算
+                    const kList = [12, 18, 24, 36];
+                    let k = kList[Math.floor(Math.random() * kList.length)];
+                    
+                    let validX = [];
+                    for(let i = 2; i <= 12; i++) {
+                        if (k % i === 0) validX.push(i);
+                    }
+                    let x = validX[Math.floor(Math.random() * validX.length)];
+                    let ansVal = k / x;
+
+                    const qHTML = `<span style="display:inline-flex; justify-content:space-between; align-items:center; width:90%; white-space:nowrap;"><span>y ＝ ${k} ÷ x  ［ x ＝ ${x} のときの y ］</span><span style="display:inline-block; width:150px; border-bottom:1px solid #000; height:18px; margin-left:15px;"></span></span>`;
+                    return { text: qHTML, ans: String(ansVal), isHTML: true };
+                }
+            }
+
+
+            return { text: `[${unit}・Lv${level}] 📝問 ＝`, ans: "解答" };
+        }
+
+        function generateAndPrint() {
+            const grade = document.getElementById("grade-select").value;
+            const level = document.getElementById("level-select").value;
+            const totalQuestions = parseInt(document.getElementById("question-count-select").value);
+            const pageCount = parseInt(document.getElementById("page-count").value);
+            const checkedBoxes = document.querySelectorAll('input[name="unit-choice"]:checked');
+            const selectedUnits = Array.from(checkedBoxes).map(cb => cb.value);
+            
+            if (selectedUnits.length === 0) { alert("単元を最低1つ以上選択してください。"); return; }
+            
+            const previewArea = document.getElementById('preview-area');
+            previewArea.innerHTML = ''; 
+
+            // 長文単元の判定（既存の制限単元に、新設された4つの長文・特殊レイアウト単元を完全統合）
+            const isLongFormulaUnit = 
+                (selectedUnits.some(u => u.includes("四則混合")) && level === "4") || 
+                selectedUnits.some(u => u.includes("見積もり")) ||
+                selectedUnits.some(u => u.includes("公倍数・公約数")) ||
+                (selectedUnits.some(u => u.includes("分数のわり算")) && level === "4") ||
+                (selectedUnits.some(u => u.includes("比の計算")) && (level === "3" || level === "4")) ||
+                selectedUnits.some(u => u.includes("混合計算")) ||
+                selectedUnits.some(u => u.includes("複雑な四則混合")) ||
+                selectedUnits.some(u => u.includes("あまりのあるわり算のたしかめ")) || // 3年新設
+                (selectedUnits.some(u => u.includes("小数の乗除筆算")) && level === "4") || // 4年新設Lv4
+                selectedUnits.some(u => u.includes("単位の換算と計算")) || // 5年新設
+                (selectedUnits.some(u => u.includes("比例の関係と代入計算")) && level === "4"); // 6年新設Lv4
+
+            
+            let gridColumns = "1fr 1fr"; 
+            let gridGapY = 55;   
+            let qItemHeight = 65; 
+            
+            // 縦1列のとき、ヘッダー周りの余白（通常35px）を縮めるための変数
+            let headerTableStyle = "margin-bottom: 35px;";
+            let qItemStyle = ""; // 通常は空
+
+            let finalTotalQuestions = totalQuestions;
+
+            if (isLongFormulaUnit) {
+                gridColumns = "1fr";
+                gridGapY = 40;       // 44 から 40 に微調整（これで下部が数センチ浮き上がります）
+                qItemHeight = 48;    // 52 から 48 に微調整
+                finalTotalQuestions = 10; 
+                headerTableStyle = "margin-bottom: 25px;"; 
+                qItemStyle = "white-space: normal; line-height: 1.4; padding-right: 20px;"; 
+            } else {
+                if (finalTotalQuestions > 10) { gridGapY = 45; qItemHeight = 60; }
+                if (finalTotalQuestions > 14) { gridGapY = 35; qItemHeight = 55; }
+                if (finalTotalQuestions > 16) { gridGapY = 25; qItemHeight = 55; }
+            }
+
+            let scoreText = "得点：　　　/ 100点";
+            if (finalTotalQuestions === 10) scoreText = "得点：　　　/ 100点<br><small style='font-size:10px;'>（1問10点）</small>"; // 元の「得0点」のタイポと思われる箇所を「得点：」に補正
+            if (finalTotalQuestions === 20) scoreText = "得点：　　　/ 100点<br><small style='font-size:10px;'>（1問5点）</small>";
+            
+            let allPagesAnswers = [];
+
+            for (let p = 1; p <= pageCount; p++) {
+                const page = document.createElement('div'); page.className = 'print-page';
+                const titleUnitText = selectedUnits.length > 2 ? "計算総合ミックス" : selectedUnits.join('・');
+                
+                // header-table に動的スタイルを適用
+                let html = `
+                    <div class="title" style="${isLongFormulaUnit ? 'margin-bottom:10px;' : ''}">${grade}年生の算数プリント（第 ${p} 回）</div>
+                    <div style="text-align:center; font-size:14px; margin-top:-15px; margin-bottom:15px;">【単元】${titleUnitText} ／ 【難易度】レベル${level}</div>
+                    <table class="header-table" style="${headerTableStyle}"><tr><td style="width: 50%;">組・氏名：</td><td style="width: 25%;">日付：　　月　　日</td><td style="width: 25%; line-height:1.2;">${scoreText}</td></tr></table>
+                    <div class="question-list" style="gap: ${gridGapY}px 15px; grid-template-columns: ${gridColumns};">
+                `;
+                
+                let currentPageAnswers = [];
+                let usedQuestions = new Set();
+
+                for (let q = 1; q <= finalTotalQuestions; q++) {
+                    let qObj; let retryCount = 0;
+                    do {
+                        const randomUnit = selectedUnits[Math.floor(Math.random() * selectedUnits.length)];
+                        qObj = createSingleQuestion(grade, randomUnit, level);
+                        retryCount++;
+                    } while (usedQuestions.has(qObj.text) && retryCount < 30);
+
+                    usedQuestions.add(qObj.text);
+                    // qItemStyle をインラインで適用し、長文時の改行と余白を制御
+                    html += `<div class="q-item" style="height:${qItemHeight}px; ${qItemStyle}">（${q}） ${qObj.text}</div>`;
+                    currentPageAnswers.push(qObj.ans); 
+                }
+                html += `</div>`; page.innerHTML = html; previewArea.appendChild(page);
+                allPagesAnswers.push(currentPageAnswers);
+            }
+
+            for (let p = 1; p <= pageCount; p++) {
+                const ansPage = document.createElement('div'); ansPage.className = 'print-page ans-page'; 
+                let html = `
+                    <div class="ans-title" style="${isLongFormulaUnit ? 'margin-bottom:10px;' : ''}">⭕ まるつけよう解答（第 ${p} 回）</div>
+                    <div style="text-align:center; font-size:14px; margin-top:-20px; margin-bottom:25px; color:#cc0000;">※ていねいにまるつけをしましょう。</div>
+                    <div class="question-list ans-item" style="gap: ${gridGapY}px 15px; grid-template-columns: ${gridColumns};">
+                `;
+                for (let q = 1; q <= finalTotalQuestions; q++) {
+                    // 解答ページも同様に改行スタイルを適用
+                    html += `<div class="q-item" style="height:${qItemHeight}px; ${qItemStyle}">（${q}） 答： ${allPagesAnswers[p-1][q-1]}</div>`;
+                }
+                html += `</div>`; ansPage.innerHTML = html; previewArea.appendChild(ansPage);
+            }
+            setTimeout(() => { window.print(); }, 300);
+        }
+
+
+        function validateQuestionCount() {
+            const level = document.getElementById("level-select").value;
+            const qCountSelect = document.getElementById("question-count-select");
+            const checkedBoxes = document.querySelectorAll('input[name="unit-choice"]:checked');
+            const selectedUnits = Array.from(checkedBoxes).map(cb => cb.value);
+
+            // 【修正】4年生の四則混合Lv4、見積もり全Lvに加え、5年生の「公倍数・公約数の暗算」も常に10問（1列レイアウト）制限の対象にします
+            // 【修正】6年生のわり算Lv4、比の計算Lv3・4も自動的に10問（1列レイアウト）制限の対象にします
+            // 【新設統合】新たに追加された3〜6年生の長文・特殊レイアウト単元も自動的に10問制限の対象に統合します
+            const isRestricted = 
+                (selectedUnits.some(u => u.includes("四則混合")) && level === "4") || 
+                selectedUnits.some(u => u.includes("見積もり")) ||
+                selectedUnits.some(u => u.includes("公倍数・公約数")) ||
+                (selectedUnits.some(u => u.includes("分数のわり算")) && level === "4") ||
+                (selectedUnits.some(u => u.includes("比の計算")) && (level === "3" || level === "4")) ||
+                selectedUnits.some(u => u.includes("混合計算")) ||
+                selectedUnits.some(u => u.includes("複雑な四則混合")) ||
+                selectedUnits.some(u => u.includes("あまりのあるわり算のたしかめ")) || // 3年新設
+                (selectedUnits.some(u => u.includes("小数の乗除筆算")) && level === "4") || // 4年新設Lv4
+                selectedUnits.some(u => u.includes("単位の換算と計算")) || // 5年新設
+                (selectedUnits.some(u => u.includes("比例の関係と代入計算")) && level === "4"); // 6年新設Lv4
+
+            Array.from(qCountSelect.options).forEach(option => {
+                const val = parseInt(option.value);
+                if (isRestricted && val > 10) {
+                    option.style.display = "none";
+                    option.disabled = true;
+                } else {
+                    option.style.display = "block";
+                    option.disabled = false;
+                }
+            });
+
+            if (isRestricted && parseInt(qCountSelect.value) > 10) {
+                qCountSelect.value = "10";
+            }
+        }
+
+
+
+        window.onload = updateUnits;
+    </script>
+</body>
+</html>
