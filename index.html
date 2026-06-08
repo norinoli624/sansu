@@ -497,50 +497,7 @@
 
 
 
-
-        function validateQuestionCount() {
-            const level = document.getElementById("level-select").value;
-            const qCountSelect = document.getElementById("question-count-select");
-            const checkedBoxes = document.querySelectorAll('input[name="unit-choice"]:checked');
-            const selectedUnits = Array.from(checkedBoxes).map(cb => cb.value);
-
-            // 【修正】4年生の四則混合Lv4、見積もり全Lvに加え、5年生の「公倍数・公約数の暗算」も常に10問（1列レイアウト）制限の対象にします
-            // 【修正】6年生のわり算Lv4、比の計算Lv3・4も自動的に10問（1列レイアウト）制限の対象にします
-            // 【新設統合】新設された長文・特殊レイアウト単元も自動的に10問（1列レイアウト）制限の対象に追加します
-            const isRestricted = 
-                (selectedUnits.some(u => u.includes("四則混合")) && level === "4") || 
-                selectedUnits.some(u => u.includes("見積もり")) ||
-                selectedUnits.some(u => u.includes("公倍数・公約数")) ||
-                (selectedUnits.some(u => u.includes("分数のわり算")) && level === "4") ||
-                (selectedUnits.some(u => u.includes("比の計算")) && (level === "3" || level === "4")) ||
-                selectedUnits.some(u => u.includes("混合計算")) ||
-                selectedUnits.some(u => u.includes("複雑な四則混合")) ||
-                selectedUnits.some(u => u.includes("あまりのあるわり算のたしかめ")) || // 3年新設
-                (selectedUnits.some(u => u.includes("小数の乗除筆算")) && level === "4") || // 4年新設Lv4のみ
-                selectedUnits.some(u => u.includes("単位の換算と計算")) || // 5年新設
-                (selectedUnits.some(u => u.includes("比例の関係と代入計算")) && level === "4"); // 6年新設Lv4のみ
-
-            Array.from(qCountSelect.options).forEach(option => {
-                const val = parseInt(option.value);
-                if (isRestricted && val > 10) {
-                    option.style.display = "none";
-                    option.disabled = true;
-                } else {
-                    option.style.display = "block";
-                    option.disabled = false;
-                }
-            });
-
-            if (isRestricted && parseInt(qCountSelect.value) > 10) {
-                qCountSelect.value = "10";
-            }
-        }
-
-
-
         function createSingleQuestion(grade, unit, level) {
-
-
             // ==========================================
             // 小学1年生の単元ロジック
             // ==========================================
@@ -1357,14 +1314,15 @@
                     return { text: `${a.toFixed(1)} ÷ ${b} ＝`, ans: ansVal.toFixed(1) };
                 }
                 if (level === "4") {
-                    // 最高峰：【1列化】小数 ÷ 2桁の整数・あまりのある割り算
+                    // 最高峰：【1列化】小数 ÷ 2桁 of 整数・あまりのある割り算
                     let divisor = Math.floor(Math.random() * 15) + 11; 
                     let quotient = Math.floor(Math.random() * 5) + 2; 
                     let remainder = (Math.floor(Math.random() * 5) + 1) / 10; 
                     let dividend = Math.round((divisor * quotient + remainder) * 10) / 10; 
-                    
+                
                     const qHTML = `<div style="line-height:1.5;">${dividend.toFixed(1)} ÷ ${divisor} ＝</div>`;
-                    return { text: qHTML, ans: `${quotient} あまり ${remainder.toFixed(1)}`, isHTML: true };
+                    // 【修正】isWide: true を追記
+                    return { text: qHTML, ans: `${quotient} あまり ${remainder.toFixed(1)}`, isHTML: true, isWide: true };
                 }
             }
 
@@ -1682,84 +1640,102 @@
 			}
 
 			// 【バグ修正：完全新設】小数と分数のまじった計算（基礎）
-			if (unit === "小数と分数のまじった計算（基礎）") {
-				const getGCD = (x, y) => (y === 0 ? x : getGCD(y, x % y));
-				const f = (w, n, den) => {
-					if (w === 0) return `<span class="fraction"><span class="numerator">${n}</span><span class="denominator">${den}</span></span>`;
-					return `<span class="fraction-whole">${w}</span><span class="fraction"><span class="numerator">${n}</span><span class="denominator">${den}</span></span>`;
-				};
-				if (level === "1") {
-					// 【修正】0.5固定を完全排除。0.2(1/5), 0.4(2/5), 0.6(3/5), 0.8(4/5)を網羅し、分数側も同分母になるよう動的生成
-					const decs = [{v: 0.2, n: 1, d: 5}, {v: 0.4, n: 2, d: 5}, {v: 0.6, n: 3, d: 5}, {v: 0.8, n: 4, d: 5}];
-					let dec = decs[Math.floor(Math.random() * decs.length)];
-					let fn = Math.floor(Math.random() * 3) + 1; // 1〜3
-					let op = Math.random() < 0.5 ? '＋' : '－';
-					
-					let ansNum = (op === '＋') ? (dec.n + fn) : (dec.n - fn);
-					if (ansNum <= 0) { op = '＋'; ansNum = dec.n + fn; } // マイナス・0対策
-					
-					let ansDen = 5;
-					const gcd = getGCD(Math.abs(ansNum), ansDen); ansNum /= gcd; ansDen /= gcd;
-					let ansStr = (ansNum === ansDen) ? "1" : f(0, ansNum, ansDen);
-					
-					if (Math.random() < 0.5) {
-						return { text: `${dec.v} ${op} ${f(0, fn, 5)} ＝`, ans: ansStr, isHTML: true };
-					} else {
-						return { text: `${f(0, fn, 5)} ${op} ${dec.v} ＝`, ans: ansStr, isHTML: true };
-					}
-				}
-				if (level === "2") {
-					// 【修正】0.25固定から拡張。0.2, 0.4, 0.6, 0.8（5分のX）や0.25, 0.75（4分のX）に対し、分母が異なる「3」や「4」の分数を組み合わせて完全動的ランダム生成
-					const decPatterns = [
-						{v: 0.2, n: 1, d: 5}, {v: 0.4, n: 2, d: 5}, {v: 0.6, n: 3, d: 5}, 
-						{v: 0.8, n: 4, d: 5}, {v: 0.25, n: 1, d: 4}, {v: 0.75, n: 3, d: 4}
-					];
-					let dec = decPatterns[Math.floor(Math.random() * decPatterns.length)];
-					let fd = (dec.d === 5) ? 3 : 5; // 異分母を確定させる選択（5なら3、4なら5）
-					let fn = Math.floor(Math.random() * (fd - 1)) + 1;
-					
-					let ansNum = dec.n * fd + fn * dec.d;
-					let ansDen = dec.d * fd;
-					const gcd = getGCD(ansNum, ansDen); ansNum /= gcd; ansDen /= gcd;
-					let ansStr = (ansNum % ansDen === 0) ? `${ansNum / ansDen}` : f(Math.floor(ansNum / ansDen), ansNum % ansDen, ansDen);
-					
-					if (Math.random() < 0.5) {
-						return { text: `${dec.v} ＋ ${f(0, fn, fd)} ＝`, ans: ansStr, isHTML: true };
-					} else {
-						return { text: `${f(0, fn, fd)} ＋ ${dec.v} ＝`, ans: ansStr, isHTML: true };
-					}
-				}
-				if (level === "3") {
-					// 【修正】0.25刻みを排除。0.2, 0.4, 0.6, 0.8や、1.2, 1.4クラスの小数を投入。さらに帯分数側も完全動的ランダム生成
-					const decPatterns = [{v: 0.2, n: 1, d: 5}, {v: 0.4, n: 2, d: 5}, {v: 0.6, n: 3, d: 5}, {v: 1.2, n: 6, d: 5}, {v: 1.4, n: 7, d: 5}];
-					let dec = decPatterns[Math.floor(Math.random() * decPatterns.length)];
-					let w1 = Math.floor(Math.random() * 2) + 1; // 1〜2
-					let fd = 3; // 計算の美しさのために異分母3で固定
-					let fn = Math.floor(Math.random() * 2) + 1; // 1〜2
-					
-					let totalNum = dec.n * fd + (w1 * fd + fn) * dec.d;
-					let ansDen = dec.d * fd;
-					const gcd = getGCD(totalNum, ansDen); totalNum /= gcd; ansDen /= gcd;
-					let ansStr = (totalNum % ansDen === 0) ? `${totalNum / ansDen}` : f(Math.floor(totalNum / ansDen), totalNum % ansDen, ansDen);
-					return { text: `${dec.v} ＋ ${f(w1, fn, fd)} ＝`, ans: ansStr, isHTML: true };
-				}
-				if (level === "4") {
-					// 【修正】分子1固定を完全撲滅。分子が「2」や「3」になる異分母の分数・小数の逆算（□）を完全動的生成
-					const decPatterns = [{v: 0.6, n: 3, d: 5}, {v: 0.8, n: 4, d: 5}, {v: 0.75, n: 3, d: 4}];
-					let dec = decPatterns[Math.floor(Math.random() * decPatterns.length)];
-					let fd = (dec.d === 5) ? 4 : 5; // 異分母化
-					let fn = (fd === 4) ? 3 : 2; // 分子を2や3に設定し、1を徹底排除
-					
-					// □ ＋ 分数 ＝ 小数 の構造から逆算
-					let ansNum = dec.n * fd - fn * dec.d;
-					let ansDen = dec.d * fd;
-					if (ansNum <= 0) { ansNum = dec.n * fd + fn * dec.d; } // マイナス回避
-					const gcd = getGCD(ansNum, ansDen); ansNum /= gcd; ansDen /= gcd;
-					let ansStr = (ansNum % ansDen === 0) ? `${ansNum / ansDen}` : f(Math.floor(ansNum / ansDen), ansNum % ansDen, ansDen);
-					return { text: `□ ＋ ${f(0, fn, fd)} ＝ ${dec.v}`, ans: ansStr, isHTML: true };
-				}
-			}
+            if (unit === "小数と分数のまじった計算（基礎）") {
+                const f = (w, n, den) => {
+                    if (w === 0) return `<span class="fraction"><span class="numerator">${n}</span><span class="denominator">${den}</span></span>`;
+                    return `<span class="fraction-whole">${w}</span><span class="fraction"><span class="numerator">${n}</span><span class="denominator">${den}</span></span>`;
+                };
+                const getGCD = (x, y) => (y === 0 ? x : getGCD(y, x % y));
 
+                if (level === "1") {
+                    // 【修正】小数のバリエーションを0.1〜0.9(0.5以外含む)に大幅拡張
+                    const decChoices = [
+                        {v: 0.2, n: 1, d: 5}, {v: 0.4, n: 2, d: 5}, {v: 0.6, n: 3, d: 5}, {v: 0.8, n: 4, d: 5},
+                        {v: 0.25, n: 1, d: 4}, {v: 0.75, n: 3, d: 4}, {v: 0.5, n: 1, d: 2}
+                    ];
+                    let dec = decChoices[Math.floor(Math.random() * decChoices.length)];
+                    let den = Math.floor(Math.random() * 4) + 3; // 3〜6
+                    let num = Math.floor(Math.random() * (den - 1)) + 1;
+                    while (getGCD(num, den) > 1) { num = Math.floor(Math.random() * (den - 1)) + 1; }
+
+                    let ansNum = num * dec.d + dec.n * den;
+                    let ansDen = den * dec.d;
+                    let gcd = getGCD(ansNum, ansDen);
+                    ansNum /= gcd; ansDen /= gcd;
+                    let ansStr = (ansNum % ansDen === 0) ? `${ansNum / ansDen}` : (ansNum > ansDen) ? f(Math.floor(ansNum / ansDen), ansNum % ansDen, ansDen) : f(0, ansNum, ansDen);
+
+                    return { text: `${f(0, num, den)} ＋ ${dec.v} ＝`, ans: ansStr, isHTML: true };
+                }
+
+                if (level === "2") {
+                    // 【修正】分数と小数のバリエーションをさらに拡大（引き算でマイナスにならない逆算制御）
+                    const decChoices = [
+                        {v: 0.2, n: 1, d: 5}, {v: 0.4, n: 2, d: 5}, {v: 0.6, n: 3, d: 5},
+                        {v: 0.25, n: 1, d: 4}, {v: 0.75, n: 3, d: 4}, {v: 0.5, n: 1, d: 2}
+                    ];
+                    let dec = decChoices[Math.floor(Math.random() * decChoices.length)];
+                    let den = Math.floor(Math.random() * 5) + 4; // 4〜8
+                    let num = Math.floor(Math.random() * (den - 1)) + 1;
+                
+                    // 引き算の逆算シミュレーション（分数 ＞ 小数 になるよう分子を底上げ）
+                    while ((num / den) <= dec.v || getGCD(num, den) > 1) {
+                        num = Math.floor(Math.random() * (den - 1)) + 1;
+                    }
+
+                    let ansNum = num * dec.d - dec.n * den;
+                    let ansDen = den * dec.d;
+                    let gcd = getGCD(ansNum, ansDen);
+                    ansNum /= gcd; ansDen /= gcd;
+                    let ansStr = (ansNum % ansDen === 0) ? `${ansNum / ansDen}` : (ansNum > ansDen) ? f(Math.floor(ansNum / ansDen), ansNum % ansDen, ansDen) : f(0, ansNum, ansDen);
+
+                    return { text: `${f(0, num, den)} － ${dec.v} ＝`, ans: ansStr, isHTML: true };
+                }
+
+                if (level === "3") {
+                    // 【修正】3つの数の計算。分数と小数のバリエーションを最大化し、通分も複雑に調整
+                    const decChoices = [{v: 0.2, n: 1, d: 5}, {v: 0.4, n: 2, d: 5}, {v: 0.25, n: 1, d: 4}, {v: 0.5, n: 1, d: 2}];
+                    let dec = decChoices[Math.floor(Math.random() * decChoices.length)];
+                
+                    let den1 = 3; 
+                    let num1 = Math.floor(Math.random() * 2) + 1; // 1/3, 2/3
+                    let den2 = 2;
+                    let num2 = 1; // 1/2
+                
+                    // 式: 分数1 ＋ 分数2 － 小数
+                    let ansNum = (num1 * den2 * dec.d) + (num2 * den1 * dec.d) - (dec.n * den1 * den2);
+                    let ansDen = den1 * den2 * dec.d;
+                
+                    let gcd = getGCD(ansNum, ansDen);
+                    ansNum /= gcd; ansDen /= gcd;
+                    let ansStr = (ansNum % ansDen === 0) ? `${ansNum / ansDen}` : (ansNum > ansDen) ? f(Math.floor(ansNum / ansDen), ansNum % ansDen, ansDen) : f(0, ansNum, ansDen);
+
+                    return { text: `${f(0, num1, den1)} ＋ ${f(0, num2, den2)} － ${dec.v} ＝`, ans: ansStr, isHTML: true };
+                }
+
+                if (level === "4") {
+                    // 【新設】仮分数を取り入れたハイレベルな分数・小数混合計算
+                    // 1より大きい分数（仮分数）をあえてそのままの形で出題
+                    let den = Math.floor(Math.random() * 4) + 3; // 分母 3〜6
+                    let num = den + (Math.floor(Math.random() * 3) + 1); // 分子 ＝ 分母 ＋ (1〜3) ➔ 必ず仮分数になる
+                
+                    const decChoices = [{v: 0.25, n: 1, d: 4}, {v: 0.5, n: 1, d: 2}, {v: 0.75, n: 3, d: 4}];
+                    let dec = decChoices[Math.floor(Math.random() * decChoices.length)];
+                
+                    // 式: 仮分数 － 小数
+                    let ansNum = num * dec.d - dec.n * den;
+                    let ansDen = den * dec.d;
+                
+                    let gcd = getGCD(ansNum, ansDen);
+                    ansNum /= gcd; ansDen /= gcd;
+                
+                    // 答えは小学生のルールに合わせて帯分数または整数で出力
+                    let ansStr = (ansNum % ansDen === 0) ? `${ansNum / ansDen}` : (ansNum > ansDen) ? f(Math.floor(ansNum / ansDen), ansNum % ansDen, ansDen) : f(0, ansNum, ansDen);
+                
+                    // 出題時は f(0, num, den) とすることで、帯分数化せず「仮分数」のまま表示させる
+                    return { text: `${f(0, num, den)} － ${dec.v} ＝`, ans: ansStr, isHTML: true };
+                }
+            }
+            
 			// 【バグ修正：完全新設】単位の換算と計算
 			if (unit === "単位の換算と計算") {
 				if (level === "1") {
@@ -1810,63 +1786,86 @@
 				}
 			}
 
-            // 4. 公倍数・公約数の暗算（1列レイアウト専用・左右美整列版）
-			if (unit === "公倍数・公約数の暗算") {
-				const getGCD = (x, y) => (y === 0 ? x : getGCD(y, x % y));
-				const getLCM = (x, y) => (x * y) / getGCD(x, y);
-				if (level === "1") {
-					// 【難易度修正】1桁同士を完全撤廃。10〜18の「2桁同士」の最小公倍数を求める問題へ引き上げ
-					let a, b;
-					while(true) {
-						a = Math.floor(Math.random() * 9) + 10; // 10〜18
-						b = Math.floor(Math.random() * 9) + 10; // 10〜18
-						if (a !== b && getLCM(a, b) <= 90) break; // 暗算の限界を考慮し、公倍数が90以下に収まるペアに制限
-					}
-					return { text: `${a} と ${b} の 最小公倍数は？`, ans: String(getLCM(a, b)) };
-				}
-				if (level === "2") {
-					// 【難易度修正】数字の大きさを拡大。「36〜84クラス」の大きな数字の最大公約数問題へ調整
-					let a, b;
-					while(true) {
-						a = (Math.floor(Math.random() * 13) + 9) * 4; // 36, 40, 44...88
-						b = (Math.floor(Math.random() * 13) + 9) * 4;
-						if (a !== b && getGCD(a, b) >= 8) break; // 最大公約数が「8以上」になる、手応えのある大きなペアに制限
-					}
-					return { text: `${a} と ${b} の 最大公約数は？`, ans: String(getGCD(a, b)) };
-				}
-				if (level === "3") {
-					// 【難易度修正】さらに数値を大きく拡張。12〜28の2桁同士の、最小公倍数パズルに調整
-					let a, b;
-					while(true) {
-						a = Math.floor(Math.random() * 17) + 12; // 12〜28
-						b = Math.floor(Math.random() * 17) + 12; // 12〜28
-						if (a !== b && getLCM(a, b) <= 150 && getLCM(a, b) >= 40) break; // 暗算負荷が最も高い40〜150の範囲に制御
-					}
-					return { text: `${a} と ${b} の 最小公倍数は？`, ans: String(getLCM(a, b)) };
-				}
-				if (level === "4") {
-					// 【修正】最大公約数固定を破壊。50%の確率で「3つの数の最大公約数」か「3つの数の最小公倍数」が出題される最高負荷モードへリビルド
-					if (Math.random() < 0.5) {
-						// 3つの数の最大公約数（大数対応：24, 36, 48クラス）
-						const trios = [
-							{a: 24, b: 36, c: 48, ans: 12}, {a: 16, b: 32, c: 48, ans: 16},
-							{a: 30, b: 45, c: 60, ans: 15}, {a: 24, b: 48, c: 72, ans: 24},
-							{a: 40, b: 60, c: 80, ans: 20}, {a: 42, b: 56, c: 70, ans: 14}
-						];
-						let t = trios[Math.floor(Math.random() * trios.length)];
-						return { text: `${t.a} と ${t.b} と ${t.c} の 最大公約数は？`, ans: String(t.ans) };
-					} else {
-						// 3つの数の最小公倍数（大数対応：4, 6, 8クラス ➔ 答え24〜60）
-						const trios = [
-							{a: 4, b: 6, c: 8, ans: 24}, {a: 6, b: 8, c: 12, ans: 24},
-							{a: 5, b: 10, c: 15, ans: 30}, {a: 4, b: 5, c: 10, ans: 20},
-							{a: 6, b: 9, c: 12, ans: 36}, {a: 8, b: 12, c: 15, ans: 120}
-						];
-						let t = trios[Math.floor(Math.random() * trios.length)];
-						return { text: `${t.a} と ${t.b} と ${t.c} の 最小公倍数は？`, ans: String(t.ans) };
-					}
-				}
-			}
+        // 4. 公倍数・公約数の暗算（1列レイアウト専用・左右美整列版）
+		if (unit === "公倍数・公約数の暗算") {
+            const getGCD = (x, y) => (y === 0 ? x : getGCD(y, x % y));
+            const getLCM = (x, y) => (x * y) / getGCD(x, y);
+
+            if (level === "1") {
+                // 【修正】2桁同士(10〜30)に拡大。最小公倍数が120以下になるペアのバリエーションを大幅に拡張
+                let a, b;
+                while(true) {
+                    a = Math.floor(Math.random() * 21) + 10; // 10〜30
+                    b = Math.floor(Math.random() * 21) + 10; // 10〜30
+                    if (a !== b && getLCM(a, b) <= 120 && getLCM(a, b) > 30) break;
+                }
+                return { text: `${a} と ${b} の 最小公倍数は？`, ans: String(getLCM(a, b)), isWide: true };
+            }
+            if (level === "2") {
+                // 【修正】2桁(40〜96)に加え、3桁(100〜180)の最大公約数問題も確率でミックス
+                let a, b;
+                if (Math.random() < 0.4) {
+                    // 3桁ミックスパターン
+                    while(true) {
+                        a = (Math.floor(Math.random() * 9) + 10) * 12; // 120〜228
+                        b = (Math.floor(Math.random() * 9) + 10) * 12; // 120〜228
+                        if (a !== b && getGCD(a, b) >= 12) break;
+                    }
+                } else {
+                    // 2桁拡張パターン
+                    while(true) {
+                        a = (Math.floor(Math.random() * 15) + 5) * 6; // 30〜114
+                        b = (Math.floor(Math.random() * 15) + 5) * 6; // 30〜114
+                        if (a !== b && getGCD(a, b) >= 6) break;
+                    }
+                }
+                return { text: `${a} と ${b} の 最大公約数は？`, ans: String(getGCD(a, b)), isWide: true };
+            }
+            if (level === "3") {
+                // 【修正】レベル1と完全差別化。最大公約数(GCD)と最小公倍数(LCM)がランダムで出題される厳しい混合問題
+                let a, b;
+                if (Math.random() < 0.5) {
+                    // 厳しい最小公倍数（数値がさらに大きく、直感で分かりにくいペア）
+                    while(true) {
+                        a = Math.floor(Math.random() * 19) + 12; // 12〜30
+                        b = Math.floor(Math.random() * 19) + 12; // 12〜30
+                        let lcmVal = getLCM(a, b);
+                        if (a !== b && lcmVal >= 60 && lcmVal <= 180 && getGCD(a, b) <= 4) break;
+                    }
+                    return { text: `${a} と ${b} の 最小公倍数は？`, ans: String(getLCM(a, b)), isWide: true };
+                } else {
+                    // 厳しい最大公約数（3種類の公約数候補が浮かぶようなひねった数値）
+                    while(true) {
+                        a = (Math.floor(Math.random() * 11) + 4) * 8; // 32〜112
+                        b = (Math.floor(Math.random() * 11) + 4) * 8; // 32〜112
+                        if (a !== b && getGCD(a, b) >= 8) break;
+                    }
+                    return { text: `${a} と ${b} の 最大公約数は？`, ans: String(getGCD(a, b)), isWide: true };
+                }
+            }
+            if (level === "4") {
+                // 【修正】最大公約数固定を破壊。3つの数の最大公約数/最小公倍数
+                if (Math.random() < 0.5) {
+                    const trios = [
+                        {a: 24, b: 36, c: 48, ans: 12}, {a: 16, b: 32, c: 48, ans: 16},
+                        {a: 30, b: 45, c: 60, ans: 15}, {a: 24, b: 48, c: 72, ans: 24},
+                        {a: 40, b: 60, c: 80, ans: 20}, {a: 42, b: 56, c: 70, ans: 14}
+                    ];
+                    let t = trios[Math.floor(Math.random() * trios.length)];
+                    // 【修正】isWide: true を追記
+                    return { text: `${t.a} と ${t.b} と ${t.c} の 最大公約数は？`, ans: String(t.ans), isWide: true };
+                } else {
+                    const trios = [
+                        {a: 4, b: 6, c: 8, ans: 24}, {a: 6, b: 8, c: 12, ans: 24},
+                        {a: 5, b: 10, c: 15, ans: 30}, {a: 4, b: 5, c: 10, ans: 20},
+                        {a: 6, b: 9, c: 12, ans: 36}, {a: 8, b: 12, c: 15, ans: 120}
+                    ];
+                    let t = trios[Math.floor(Math.random() * trios.length)];
+                    // 【修正】isWide: true を追記
+                    return { text: `${t.a} と ${t.b} と ${t.c} の 最小公倍数は？`, ans: String(t.ans), isWide: true };
+                }
+            }
+        }
 
 
 
@@ -2046,16 +2045,16 @@
                 }
                 if (level === "3" || level === "4") {
                     // 【再設計：1列レイアウト連動】等しい比の□を求める計算（逆算）
-                    let baseA = Math.floor(Math.random() * 4) + 2; // 2〜5
+                    let baseA = Math.floor(Math.random() * 4) + 2; 
                     let baseB = Math.floor(Math.random() * 4) + 2; 
                     while (getGCD(baseA, baseB) > 1) { baseB = Math.floor(Math.random() * 4) + 2; }
-                    
-                    let mul = Math.floor(Math.random() * 5) + 3; // 3〜7倍
+                
+                    let mul = Math.floor(Math.random() * 5) + 3; 
                     let bigA = baseA * mul; let bigB = baseB * mul;
-                    
+                
                     let formula = ""; let targetAns = "";
                     const pattern = Math.floor(Math.random() * 3);
-                    
+                
                     if (pattern === 0) {
                         formula = `${baseA} ： ${baseB} ＝ □ ： ${bigB}`;
                         targetAns = String(bigA);
@@ -2066,9 +2065,10 @@
                         formula = `□ ： ${bigB} ＝ ${baseA} ： ${baseB}`;
                         targetAns = String(bigA);
                     }
-                    
+                
                     const qHTML = `<span style="display:inline-flex; justify-content:space-between; align-items:center; width:85%; white-space:nowrap;"><span>${formula}</span><span style="display:inline-block; width:150px; border-bottom:1px solid #000; height:18px; margin-left:15px;"></span></span>`;
-                    return { text: qHTML, ans: targetAns, isHTML: true };
+                    // 【修正】isWide: true を追記
+                    return { text: qHTML, ans: targetAns, isHTML: true, isWide: true };
                 }
             }
 
@@ -2165,222 +2165,269 @@
 					}
 				}
 			}
-            // 6. 複雑な四則混合計算（1列レイアウト専用）
-			if (unit === "複雑な四則混合計算") {
-				const getGCD = (x, y) => (y === 0 ? x : getGCD(y, x % y));
-				const getLCM = (x, y) => (x * y) / getGCD(x, y);
-				const f = (w, n, den) => {
-					if (w === 0) return `<span class="fraction"><span class="numerator">${n}</span><span class="denominator">${den}</span></span>`;
-					return `<span class="fraction-whole">${w}</span><span class="fraction"><span class="numerator">${n}</span><span class="denominator">${den}</span></span>`;
-				};
-				
-				if (level === "1") {
-					// 【修正】かっこの中の分数計算が「必ず異分母」になるように制御ループを構築
-					let d1, d2, n1, n2;
-					while (true) {
-						d1 = Math.floor(Math.random() * 4) + 2; // 2〜5
-						d2 = Math.floor(Math.random() * 4) + 2; // 2〜5
-						if (d1 !== d2) break; // 異分母を強制
-					}
-					n1 = 1; n2 = 1;
-					let lcm = getLCM(d1, d2);
-					let sumNum = n1 * (lcm / d1) + n2 * (lcm / d2);
-					let c = lcm * (Math.floor(Math.random() * 2) + 1); // 綺麗に約分消去できる整数
-					let finalNum = sumNum * (c / lcm);
-					let ansStr = String(finalNum);
-					return { text: `（${f(0, n1, d1)} ＋ ${f(0, n2, d2)}）× ${c} ＝`, ans: ansStr, isHTML: true };
-				}
-				if (level === "2") {
-					// 【修正】小数の0.5刻みの偏りを完全に破壊。0.2, 0.4, 0.6, 0.8, 0.25, 0.75を網羅
-					const decs = [
-						{v: 0.2, n: 1, d: 5}, {v: 0.4, n: 2, d: 5}, {v: 0.6, n: 3, d: 5}, 
-						{v: 0.8, n: 4, d: 5}, {v: 0.25, n: 1, d: 4}, {v: 0.75, n: 3, d: 4}
-					];
-					let dec = decs[Math.floor(Math.random() * decs.length)];
-					let d1 = 2, d2 = 3; let n1 = 1, n2 = 2;
-					if (Math.random() > 0.5) { d1 = 3; d2 = 4; n1 = 2; n2 = 1; }
-					let multNum = n1 * n2; let multDen = d1 * d2;
-					let ansNum = multNum * dec.d + dec.n * multDen; let ansDen = multDen * dec.d;
-					const gcd = getGCD(ansNum, ansDen); ansNum /= gcd; ansDen /= gcd;
-					let ansStr = (ansNum % ansDen === 0) ? `${ansNum / ansDen}` : f(Math.floor(ansNum / ansDen), ansNum % ansDen, ansDen);
-					return { text: `${f(0, n1, d1)} × ${f(0, n2, d2)} ＋ ${dec.v} ＝`, ans: ansStr, isHTML: true };
-				}
-				if (level === "3") {
-					// 【修正】(0.7 - 1/5)固定を一掃。多様な小数と異分母分数の組み合わせを完全動的ランダム生成
-					const pairs = [
-						{decV: 0.7, dn: 1, dd: 5, rNum: 1, rDen: 2}, // 0.7 - 0.2 = 0.5 = 1/2
-						{decV: 0.8, dn: 3, dd: 10, rNum: 1, rDen: 2}, // 0.8 - 0.3 = 0.5 = 1/2
-						{decV: 0.9, dn: 2, dd: 5, rNum: 1, rDen: 2}, // 0.9 - 0.4 = 0.5 = 1/2
-						{decV: 0.6, dn: 1, dd: 4, rNum: 7, rDen: 20}, // 0.6 - 0.25 = 0.35 = 7/20
-						{decV: 0.5, dn: 1, dd: 4, rNum: 1, rDen: 4}  // 0.5 - 0.25 = 0.25 = 1/4
-					];
-					let pair = pairs[Math.floor(Math.random() * pairs.length)];
-					let fd = Math.floor(Math.random() * 3) + 2; // 2〜4
-					let fn = Math.floor(Math.random() * (fd - 1)) + 1;
-					let ansNum = fn * pair.rDen; let ansDen = fd * pair.rNum;
-					const gcd = getGCD(ansNum, ansDen); ansNum /= gcd; ansDen /= gcd;
-					let ansStr = (ansNum % ansDen === 0) ? `${ansNum / ansDen}` : f(Math.floor(ansNum / ansDen), ansNum % ansDen, ansDen);
-					return { text: `${f(0, fn, fd)} ÷ （${pair.decV} － ${f(0, pair.dn, pair.dd)}）＝`, ans: ansStr, isHTML: true };
-				}
-				if (level === "4") {
-					// 【修正】固定パターンの完全排除。多段階の分数四則（分数×分数 ＋ 分数÷整数）を完全自動ランダム構築
-					let d1 = Math.floor(Math.random() * 2) + 2; // 2〜3
-					let d2 = Math.floor(Math.random() * 2) + 3; // 3〜4
-					let d3 = Math.floor(Math.random() * 2) + 4; // 4〜5
-					let c = Math.floor(Math.random() * 2) + 2;  // 2〜3
-					let n1 = 1, n2 = 1, n3 = 1;
-					
-					let mDen = d1 * d2; 
-					let divDen = d3 * c; 
-					let lcm = getLCM(mDen, divDen);
-					let ansNum = 1 * (lcm / mDen) + 1 * (lcm / divDen);
-					let ansDen = lcm;
-					const gcd = getGCD(ansNum, ansDen); ansNum /= gcd; ansDen /= gcd;
-					let ansStr = (ansNum % ansDen === 0) ? `${ansNum / ansDen}` : f(Math.floor(ansNum / ansDen), ansNum % ansDen, ansDen);
-					return { text: `${f(0, n1, d1)} × ${f(0, n2, d2)} ＋ ${f(0, n3, d3)} ÷ ${c} ＝`, ans: ansStr, isHTML: true };
-				}
-			}
 
-            // 【新設単元】比例の関係と代入計算
-			if (unit === "比例の関係と代入計算") {
-				// 【1列化の大修正】レベル1〜3の問題用紙表示がA4からはみ出る不具合を、レベル4と同じ「1列強制フラグ（isWide）」を適用して完全解決
-				if (level === "1") {
-					let k = Math.floor(Math.random() * 11) + 2;
-					let x = Math.floor(Math.random() * 8) + 2;
-					let ans = String(k * x);
-					return { text: `y ＝ ${k} × x の式で、x ＝ ${x} のときの y の値は？`, ans: ans, isWide: true };
-				}
-				if (level === "2") {
-					let k = Math.floor(Math.random() * 11) + 2;
-					let x = Math.floor(Math.random() * 8) + 2;
-					let y = k * x;
-					let ans = String(x);
-					return { text: `y ＝ ${k} × x の式で、y ＝ ${y} のときの x の値は？`, ans: ans, isWide: true };
-				}
-				if (level === "3") {
-					let x = Math.floor(Math.random() * 8) + 2;
-					let y = Math.floor(Math.random() * 8) + 2;
-					let k = x * y;
-					let ans = String(y);
-					return { text: `y ＝ ${k} ÷ x の式で、x ＝ ${x} のときの y の値は？`, ans: ans, isWide: true };
-				}
-				if (level === "4") {
-					let x = Math.floor(Math.random() * 11) + 3;
-					let y = Math.floor(Math.random() * 11) + 3;
-					let k = x * y;
-					let ans = String(y);
-					return { text: `y ＝ ${k} ÷ x の式で、x ＝ ${x} のときの y の値は？`, ans: ans, isWide: true };
-				}
-			}
 
+            // ==========================================
+            // 複雑な四則混合計算（小6）レベル4 拡張版
+            // ==========================================
+            if (unit === "複雑な四則混合計算") {
+                const getGCD = (x, y) => (y === 0 ? x : getGCD(y, x % y));
+                const f = (w, n, den) => {
+                    if (w === 0) return `<span class="fraction"><span class="numerator">${n}</span><span class="denominator">${den}</span></span>`;
+                    return `<span class="fraction-whole">${w}</span><span class="fraction"><span class="numerator">${n}</span><span class="denominator">${den}</span></span>`;
+                };
+
+                // ※レベル1〜3のロジックが既にある場合は、ここ（level === "4"）のみを差し替えてください
+                if (level === "4") {
+                    // 【最難関レベル：分数と小数の3段階四則混合混合（強制異分母）】
+                    // ①分母のバリエーションを最大20まで拡大
+                    let d1 = Math.floor(Math.random() * 11) + 10; // 分母1 (10〜20)
+                    let d2 = Math.floor(Math.random() * 6) + 4;   // 分母2 (4〜9)
+                    while (d1 === d2 || getGCD(d1, d2) > 2) {
+                        d2 = Math.floor(Math.random() * 6) + 4; // 通分が複雑になるよう制御
+                    }
+
+                    // ②分子のバリエーションを「2以上（1以外）」で動的生成
+                    let n1 = Math.floor(Math.random() * (d1 - 3)) + 2; // 分子1 (2 〜 d1-2)
+                    let n2 = Math.floor(Math.random() * (d2 - 2)) + 2; // 分子2 (2 〜 d2-1)
+                    
+                    // 整数部分の定義（帯分数化）
+                    let w1 = Math.floor(Math.random() * 2) + 1; // 1〜2
+                    let w2 = Math.floor(Math.random() * 2) + 1; // 1〜2
+
+                    // 計算式の一部分にマイルドな小数（0.25や0.5など分数化しやすいもの）をミックス
+                    const decChoices = [{v: 0.5, n: 1, d: 2}, {v: 0.25, n: 1, d: 4}, {v: 0.75, n: 3, d: 4}];
+                    let decObj = decChoices[Math.floor(Math.random() * decChoices.length)];
+
+                    // 通分逆算による答えの自動算出ロジック（数理的破綻の100%撲滅）
+                    let improperN1 = w1 * d1 + n1;
+                    let improperN2 = w2 * d2 + n2;
+                    
+                    // 式のシミュレーション: (w1 n1/d1 - w2 n2/d2) × decObj.v
+                    let lcm = (d1 * d2) / getGCD(d1, d2);
+                    let v1 = improperN1 * (lcm / d1);
+                    let v2 = improperN2 * (lcm / d2);
+                    
+                    // 引き算でマイナスにならないよう安全弁を配置
+                    if (v1 <= v2) {
+                        let temp = improperN1; improperN1 = improperN2; improperN2 = temp;
+                        let tempD = d1; d1 = d2; d2 = tempD;
+                        let tempN = n1; n1 = n2; n2 = tempN;
+                        let tempW = w1; w1 = w2; w2 = tempW;
+                        let tempV = v1; v1 = v2; v2 = tempV;
+                    }
+
+                    let diffNum = v1 - v2;
+                    let diffDen = lcm;
+
+                    // 小数（分数変換後）との掛け算
+                    let finalNum = diffNum * decObj.n;
+                    let finalDen = diffDen * decObj.d;
+
+                    // 最終的な答えの約分処理
+                    let finalGCD = getGCD(finalNum, finalDen);
+                    finalNum /= finalGCD;
+                    finalDen /= finalGCD;
+
+                    let ansStr = (finalNum % finalDen === 0) ? `${finalNum / finalDen}` : (finalNum > finalDen) ? f(Math.floor(finalNum / finalDen), finalNum % finalDen, finalDen) : f(0, finalNum, finalDen);
+                    
+                    // 複雑な式を美しく並べるHTMLテキスト
+                    let qText = `（ ${f(w1, n1, d1)} － ${f(w2, n2, d2)} ） × ${decObj.v} ＝`;
+                    
+                    // 鉄の掟：複雑な式のため、はみ出しを防ぐ isWide: true を完全適用
+                    return { text: qText, ans: ansStr, isHTML: true, isWide: true };
+                }
+            }
+
+
+            // ==========================================
+            // 【修正版】比例の関係と代入計算（小6）全レベル1列化対応
+            // ==========================================
+            if (unit === "比例の関係と代入計算") {
+                const f = (w, n, den) => {
+                    if (w === 0) return `<span class="fraction"><span class="numerator">${n}</span><span class="denominator">${den}</span></span>`;
+                    return `<span class="fraction-whole">${w}</span><span class="fraction"><span class="numerator">${n}</span><span class="denominator">${den}</span></span>`;
+                };
+
+                if (level === "1") {
+                    // レベル1：y = 決まった数 × x への整数の代入
+                    let k = Math.floor(Math.random() * 8) + 2; // 決まった数 (2〜9)
+                    let x = Math.floor(Math.random() * 8) + 2; // x (2〜9)
+                    // 【修正】isWide: true を追記して1列化
+                    return { text: `ｙ ＝ ${k} × ｘ で、ｘ ＝ ${x} のとき、ｙ ＝`, ans: String(k * x), isWide: true };
+                }
+                
+                if (level === "2") {
+                    // レベル2：y = 決まった数 × x への小数の代入
+                    let k = Math.floor(Math.random() * 8) + 2; // 決まった数 (2〜9)
+                    let x = (Math.floor(Math.random() * 9) + 1) / 10; // x (0.1〜0.9)
+                    let ansVal = parseFloat((k * x).toFixed(1));
+                    // 【修正】isWide: true を追記して1列化
+                    return { text: `ｙ ＝ ${k} × ｘ で、ｘ ＝ ${x.toFixed(1)} のとき、ｙ ＝`, ans: String(ansVal), isWide: true };
+                }
+                
+                if (level === "3") {
+                    // レベル3：y = 決まった数 × x への分数の代入
+                    let k = Math.floor(Math.random() * 5) + 2; // 決まった数 (2〜6)
+                    let den = Math.floor(Math.random() * 5) + 3; // 分母 (3〜7)
+                    let num = Math.floor(Math.random() * (den - 1)) + 1; // 分子
+                    
+                    // 分数の掛け算ロジックと約分処理
+                    let ansNum = k * num;
+                    let ansDen = den;
+                    const getGCD = (x, y) => (y === 0 ? x : getGCD(y, x % y));
+                    let gcd = getGCD(ansNum, ansDen);
+                    ansNum /= gcd; ansDen /= gcd;
+                    
+                    let ansStr = (ansNum % ansDen === 0) ? `${ansNum / ansDen}` : (ansNum > ansDen) ? f(Math.floor(ansNum / ansDen), ansNum % ansDen, ansDen) : f(0, ansNum, ansDen);
+                    // 【修正】isWide: true を追記して1列化
+                    return { text: `ｙ ＝ ${k} × ｘ で、ｘ ＝ ${f(0, num, den)} のとき、ｙ ＝`, ans: ansStr, isHTML: true, isWide: true };
+                }
+                
+                if (level === "4") {
+                    // レベル4：【1列化】反比例 y = 決まった数 ÷ x への代入計算
+                    let x = Math.floor(Math.random() * 6) + 2; // x (2〜7)
+                    let ansVal = Math.floor(Math.random() * 5) + 2; // yの答え (2〜6)
+                    let k = x * ansVal; // 決まった数（比例定数）
+                    return { text: `ｙ ＝ ${k} ÷ ｘ で、ｘ ＝ ${x} のとき、ｙ ＝`, ans: String(ansVal), isWide: true };
+                }
+            }
             return { text: `[${unit}・Lv${level}] 📝問 ＝`, ans: "解答" };
         }
 
         function generateAndPrint() {
             const grade = document.getElementById("grade-select").value;
             const level = document.getElementById("level-select").value;
-            const totalQuestions = parseInt(document.getElementById("question-count-select").value);
-            const pageCount = parseInt(document.getElementById("page-count").value);
+            const qCountSelect = document.getElementById("question-count-select");
+            const qCount = parseInt(qCountSelect.value);
+            const pageCount = parseInt(document.getElementById("page-count").value) || 1;
+            
+            // チェックされている単元のリストを取得
             const checkedBoxes = document.querySelectorAll('input[name="unit-choice"]:checked');
             const selectedUnits = Array.from(checkedBoxes).map(cb => cb.value);
             
-            if (selectedUnits.length === 0) { alert("単元を最低1つ以上選択してください。"); return; }
-            
-            const previewArea = document.getElementById('preview-area');
-            previewArea.innerHTML = ''; 
-
-            // 長文単元の判定（既存の制限単元に、新設された4つの長文・特殊レイアウト単元を完全統合）
-            const isLongFormulaUnit = 
-                (selectedUnits.some(u => u.includes("四則混合")) && level === "4") || 
-                selectedUnits.some(u => u.includes("見積もり")) ||
-                selectedUnits.some(u => u.includes("公倍数・公約数")) ||
-                (selectedUnits.some(u => u.includes("分数のわり算")) && level === "4") ||
-                (selectedUnits.some(u => u.includes("比の計算")) && (level === "3" || level === "4")) ||
-                selectedUnits.some(u => u.includes("混合計算")) ||
-                selectedUnits.some(u => u.includes("複雑な四則混合")) ||
-                selectedUnits.some(u => u.includes("あまりのあるわり算のたしかめ")) || // 3年新設
-                (selectedUnits.some(u => u.includes("小数の乗除筆算")) && level === "4") || // 4年新設Lv4
-                selectedUnits.some(u => u.includes("単位の換算と計算")) || // 5年新設
-                (selectedUnits.some(u => u.includes("比例の関係と代入計算")) && level === "4"); // 6年新設Lv4
-
-            
-            let gridColumns = "1fr 1fr"; 
-            let gridGapY = 55;   
-            let qItemHeight = 65; 
-            
-            // 縦1列のとき、ヘッダー周りの余白（通常35px）を縮めるための変数
-            let headerTableStyle = "margin-bottom: 35px;";
-            let qItemStyle = ""; // 通常は空
-
-            let finalTotalQuestions = totalQuestions;
-
-            if (isLongFormulaUnit) {
-                gridColumns = "1fr";
-                gridGapY = 40;       // 44 から 40 に微調整（これで下部が数センチ浮き上がります）
-                qItemHeight = 48;    // 52 から 48 に微調整
-                finalTotalQuestions = 10; 
-                headerTableStyle = "margin-bottom: 25px;"; 
-                qItemStyle = "white-space: normal; line-height: 1.4; padding-right: 20px;"; 
-            } else {
-                if (finalTotalQuestions > 10) { gridGapY = 45; qItemHeight = 60; }
-                if (finalTotalQuestions > 14) { gridGapY = 35; qItemHeight = 55; }
-                if (finalTotalQuestions > 16) { gridGapY = 25; qItemHeight = 55; }
+            if (selectedUnits.length === 0) {
+                alert("少なくとも1つの単元を選択してください。");
+                return;
             }
-
-            let scoreText = "得点：　　　/ 100点";
-            if (finalTotalQuestions === 10) scoreText = "得点：　　　/ 100点<br><small style='font-size:10px;'>（1問10点）</small>"; // 元の「得0点」のタイポと思われる箇所を「得点：」に補正
-            if (finalTotalQuestions === 20) scoreText = "得点：　　　/ 100点<br><small style='font-size:10px;'>（1問5点）</small>";
             
-            let allPagesAnswers = [];
-
+            const previewArea = document.getElementById("preview-area");
+            previewArea.innerHTML = ""; // プレビューエリアを初期化
+            
+            // 指定されたページ数分、問題ページと解答ページをループ生成
             for (let p = 1; p <= pageCount; p++) {
-                const page = document.createElement('div'); page.className = 'print-page';
-                const titleUnitText = selectedUnits.length > 2 ? "計算総合ミックス" : selectedUnits.join('・');
+                // 1. 問題ページの生成
+                const qPage = document.createElement("div");
+                qPage.className = "print-page";
                 
-                // header-table に動的スタイルを適用
-                let html = `
-                    <div class="title" style="${isLongFormulaUnit ? 'margin-bottom:10px;' : ''}">${grade}年生の算数プリント（第 ${p} 回）</div>
-                    <div style="text-align:center; font-size:14px; margin-top:-15px; margin-bottom:15px;">【単元】${titleUnitText} ／ 【難易度】レベル${level}</div>
-                    <table class="header-table" style="${headerTableStyle}"><tr><td style="width: 50%;">組・氏名：</td><td style="width: 25%;">日付：　　月　　日</td><td style="width: 25%; line-height:1.2;">${scoreText}</td></tr></table>
-                    <div class="question-list" style="gap: ${gridGapY}px 15px; grid-template-columns: ${gridColumns};">
-                `;
+                // ヘッダー（タイトル・名前欄）の構築
+                let gradeText = document.getElementById("grade-select").options[document.getElementById("grade-select").selectedIndex].text;
+                let levelText = document.getElementById("level-select").options[document.getElementById("level-select").selectedIndex].text;
                 
-                let currentPageAnswers = [];
-                let usedQuestions = new Set();
-
-                for (let q = 1; q <= finalTotalQuestions; q++) {
-                    let qObj; let retryCount = 0;
-                    do {
-                        const randomUnit = selectedUnits[Math.floor(Math.random() * selectedUnits.length)];
-                        qObj = createSingleQuestion(grade, randomUnit, level);
-                        retryCount++;
-                    } while (usedQuestions.has(qObj.text) && retryCount < 30);
-
-                    usedQuestions.add(qObj.text);
-                    // qItemStyle をインラインで適用し、長文時の改行と余白を制御
-                    html += `<div class="q-item" style="height:${qItemHeight}px; ${qItemStyle}">（${q}） ${qObj.text}</div>`;
-                    currentPageAnswers.push(qObj.ans); 
+                // レベル表記から詳細な文言を除き、すっきりさせる調整
+                if (levelText.includes("（")) {
+                    levelText = levelText.substring(0, levelText.indexOf("（"));
                 }
-                html += `</div>`; page.innerHTML = html; previewArea.appendChild(page);
-                allPagesAnswers.push(currentPageAnswers);
-            }
-
-            for (let p = 1; p <= pageCount; p++) {
-                const ansPage = document.createElement('div'); ansPage.className = 'print-page ans-page'; 
-                let html = `
-                    <div class="ans-title" style="${isLongFormulaUnit ? 'margin-bottom:10px;' : ''}">⭕ まるつけよう解答（第 ${p} 回）</div>
-                    <div style="text-align:center; font-size:14px; margin-top:-20px; margin-bottom:25px; color:#cc0000;">※ていねいにまるつけをしましょう。</div>
-                    <div class="question-list ans-item" style="gap: ${gridGapY}px 15px; grid-template-columns: ${gridColumns};">
+                
+                let headerHTML = `
+                    <div class="title">算数プリント（${gradeText}・${levelText}）</div>
+                    <table class="header-table">
+                        <tr>
+                            <td style="width: 25%;">年　　組　　番</td>
+                            <td style="width: 50%;">なまえ：</td>
+                            <td style="width: 25%; text-align: center;">得点：　　　／100</td>
+                        </tr>
+                    </table>
+                    <div class="question-list" id="q-list-${p}"></div>
                 `;
-                for (let q = 1; q <= finalTotalQuestions; q++) {
-                    // 解答ページも同様に改行スタイルを適用
-                    html += `<div class="q-item" style="height:${qItemHeight}px; ${qItemStyle}">（${q}） 答： ${allPagesAnswers[p-1][q-1]}</div>`;
+                qPage.innerHTML = headerHTML;
+                previewArea.appendChild(qPage);
+                
+                // 2. 解答ページの生成
+                const aPage = document.createElement("div");
+                aPage.className = "print-page ans-page";
+                let ansHeaderHTML = `
+                    <div class="ans-title">【こたえ】算数プリント（${gradeText}・${levelText}）</div>
+                    <div class="question-list" id="a-list-${p}"></div>
+                `;
+                aPage.innerHTML = ansHeaderHTML;
+                
+                const qListContainer = qPage.querySelector(`#q-list-${p}`);
+                const aListContainer = aPage.querySelector(`#a-list-${p}`);
+                
+                // A4はみ出しを防ぐため、1列化フラグを検知する変数
+                let hasWideQuestion = false;
+                const pageQuestions = [];
+                
+                // 問題の生成とフラグチェック
+                for (let i = 0; i < qCount; i++) {
+                    // 複数単元が選ばれている場合はランダムにシャッフルして出題
+                    const targetUnit = selectedUnits[Math.floor(Math.random() * selectedUnits.length)];
+                    const qObj = createSingleQuestion(grade, targetUnit, level);
+                    
+                    if (qObj.isWide) {
+                        hasWideQuestion = true;
+                    }
+                    pageQuestions.push(qObj);
                 }
-                html += `</div>`; ansPage.innerHTML = html; previewArea.appendChild(ansPage);
+                
+                // 【仕様適合】isWideフラグが1つでもある、または問題数制限（10問専用）の場合は1列縦並びに強制制御
+                if (hasWideQuestion || qCount === 10) {
+                    qListContainer.style.gridTemplateColumns = "1fr";
+                    aListContainer.style.gridTemplateColumns = "1fr";
+                } else {
+                    qListContainer.style.gridTemplateColumns = "1fr 1fr";
+                    aListContainer.style.gridTemplateColumns = "1fr 1fr";
+                }
+                
+                // 問題数（行数）に応じて上下の隙間（gap）や高さを動的に最適化し、A4用紙1枚へのジャスト収まりを制御
+                let rowGap = "clamp(15px, 4vh, 35px)";
+                let itemPadding = "12px 0";
+                if (qCount > 14) {
+                    rowGap = "clamp(8px, 2vh, 16px)";
+                    itemPadding = "6px 0";
+                }
+                qListContainer.style.rowGap = rowGap;
+                aListContainer.style.rowGap = rowGap;
+                
+                // HTML要素への流し込み
+                pageQuestions.forEach((qObj, index) => {
+                    const qItem = document.createElement("div");
+                    qItem.className = "q-item";
+                    qItem.style.padding = itemPadding;
+                    
+                    // 問題番号の付与
+                    const numSpan = `<span style="font-weight: bold; margin-right: 12px; display: inline-block; width: 40px; text-align: right;">(${index + 1})</span>`;
+                    
+                    if (qObj.isHTML) {
+                        qItem.innerHTML = `${numSpan}<div style="display: inline-block; vertical-align: middle;">${qObj.text}</div>`;
+                    } else {
+                        qItem.innerHTML = `${numSpan}${qObj.text}`;
+                    }
+                    qListContainer.appendChild(qItem);
+                    
+                    // 解答の流し込み
+                    const aItem = document.createElement("div");
+                    aItem.className = "q-item ans-item";
+                    aItem.style.padding = itemPadding;
+                    
+                    if (qObj.isHTML || String(qObj.ans).includes("span")) {
+                        aItem.innerHTML = `${numSpan}<div style="display: inline-block; vertical-align: middle;">${qObj.ans}</div>`;
+                    } else {
+                        aItem.innerHTML = `${numSpan}${qObj.ans}`;
+                    }
+                    aListContainer.appendChild(aItem);
+                });
+                
+                // 解答ページを問題ページのすぐ後ろにセット（印刷時に「問題➔解答」の順で出力されるよう制御）
+                previewArea.appendChild(aPage);
             }
-            setTimeout(() => { window.print(); }, 300);
+            
+            // プレビュー生成後、即座にブラウザの標準印刷・PDF出力ダイアログを起動
+            setTimeout(() => {
+                window.print();
+            }, 300);
         }
-
 
         function validateQuestionCount() {
             const level = document.getElementById("level-select").value;
@@ -2402,7 +2449,7 @@
                 selectedUnits.some(u => u.includes("あまりのあるわり算のたしかめ")) || // 3年新設
                 (selectedUnits.some(u => u.includes("小数の乗除筆算")) && level === "4") || // 4年新設Lv4
                 selectedUnits.some(u => u.includes("単位の換算と計算")) || // 5年新設
-                (selectedUnits.some(u => u.includes("比例の関係と代入計算")) && level === "4"); // 6年新設Lv4
+                selectedUnits.some(u => u.includes("比例の関係と代入計算")); // 【修正】全レベルで10問制限の対象にする
 
             Array.from(qCountSelect.options).forEach(option => {
                 const val = parseInt(option.value);
@@ -2422,7 +2469,11 @@
 
 
 
-        window.onload = updateUnits;
+        // 初期化処理：ページ読み込み時に一番最初の学年（小1）の単元リストを構築
+        window.onload = function() {
+            updateUnits();
+        };
+
     </script>
 </body>
 </html>
