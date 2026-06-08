@@ -2133,35 +2133,46 @@
                 };
 
                 if (level === "1") {
-                    // レベル1：【1列化】分数と小数の加減計算・基本（分数先・小数先・足し引きを完全網羅）
-                    let den = Math.floor(Math.random() * 4) + 3; 
-                    let num = Math.floor(Math.random() * (den - 1)) + 1;
-                    while (getGCD(num, den) > 1) { num = Math.floor(Math.random() * (den - 1)) + 1; }
-                    
+                    // レベル1：【1列化】分数と小数の加減計算・基本（無限ループバグを完全修正）
                     const decChoices = [{v: 0.2, n: 1, d: 5}, {v: 0.4, n: 2, d: 5}, {v: 0.5, n: 1, d: 2}, {v: 0.25, n: 1, d: 4}];
                     let dec = decChoices[Math.floor(Math.random() * decChoices.length)];
-
-                    let ansNum, ansDen, qText;
+                    
                     let pSign = Math.random() < 0.5 ? "＋" : "－";
                     let pOrder = Math.random() < 0.5 ? "F_D" : "D_F";
+                    
+                    let den = 4;
+                    let num = 3;
+                    
+                    if (pSign === "＋") {
+                        den = Math.floor(Math.random() * 4) + 3; // 3〜6
+                        num = Math.floor(Math.random() * (den - 1)) + 1;
+                        while (getGCD(num, den) > 1) { den++; num = Math.floor(Math.random() * (den - 1)) + 1; }
+                    } else {
+                        // 【安全逆算ロジック】引き算の無限ループを100%撲滅する配列制御
+                        if (pOrder === "F_D") {
+                            // 分数 － 小数 のとき（必ず分数が大きくなるペアを安全に選択）
+                            const safePairs = [{n:3, d:4, dv:0.2, dn:1, dd:5}, {n:4, d:5, dv:0.5, dn:1, dd:2}, {n:2, d:3, dv:0.25, dn:1, dd:4}, {n:5, d:6, dv:0.4, dn:2, dd:5}];
+                            let pair = safePairs[Math.floor(Math.random() * safePairs.length)];
+                            num = pair.n; den = pair.d; dec = {v: pair.dv, n: pair.dn, d: pair.dd};
+                        } else {
+                            // 小数 － 分数 のとき（必ず小数が大きくなるペアを安全に選択）
+                            const safePairs = [{n:1, d:4, dv:0.5, dn:1, dd:2}, {n:1, d:3, dv:0.75, dn:3, dd:4}, {n:1, d:5, dv:0.4, dn:2, dd:5}, {n:2, d:5, dv:0.6, dn:3, dd:5}];
+                            let pair = safePairs[Math.floor(Math.random() * safePairs.length)];
+                            num = pair.n; den = pair.d; dec = {v: pair.dv, n: pair.dn, d: pair.dd};
+                        }
+                    }
 
+                    let ansNum, ansDen, qText;
                     if (pSign === "＋") {
                         ansNum = num * dec.d + dec.n * den;
                         ansDen = den * dec.d;
                         qText = (pOrder === "F_D") ? `${f(0, num, den)} ＋ ${dec.v} ＝` : `${dec.v} ＋ ${f(0, num, den)} ＝`;
                     } else {
                         if (pOrder === "F_D") {
-                            while (num / den <= dec.v) {
-                                den = Math.floor(Math.random() * 4) + 3;
-                                num = Math.floor(Math.random() * (den - 1)) + 1;
-                            }
                             ansNum = num * dec.d - dec.n * den;
                             ansDen = den * dec.d;
                             qText = `${f(0, num, den)} － ${dec.v} ＝`;
                         } else {
-                            while (dec.v <= num / den) {
-                                dec = decChoices[Math.floor(Math.random() * decChoices.length)];
-                            }
                             ansNum = dec.n * den - num * dec.d;
                             ansDen = den * dec.d;
                             qText = `${dec.v} － ${f(0, num, den)} ＝`;
@@ -2174,7 +2185,7 @@
                 }
 
                 if (level === "2") {
-                    // レベル2：【1列化】分数と小数の乗除計算・基本（分数先・小数先・乗除を完全シャffle）
+                    // レベル2：【1列化】分数と小数の乗除計算・基本
                     let den = Math.floor(Math.random() * 5) + 3; 
                     let num = Math.floor(Math.random() * (den - 1)) + 1;
                     while (getGCD(num, den) > 1) { num = Math.floor(Math.random() * (den - 1)) + 1; }
@@ -2214,15 +2225,12 @@
                         {v: 0.6, n: 3, d: 5}, {v: 0.8, n: 4, d: 5}, {v: 0.25, n: 1, d: 4}, {v: 0.75, n: 3, d: 4}
                     ];
                     let dec1 = decChoices[Math.floor(Math.random() * decChoices.length)];
-                    
-                    let qText = "";
-                    let ansNum = 1, ansDen = 1;
+                    let qText = ""; let ansNum = 1, ansDen = 1;
                     
                     if (Math.random() < 0.5) {
-                        // 【拡張】分数1・小数2 のパターン
+                        // 分数1・小数2 のパターン
                         let dec2 = decChoices[Math.floor(Math.random() * decChoices.length)];
                         while (dec1.v === dec2.v) { dec2 = decChoices[Math.floor(Math.random() * decChoices.length)]; }
-                        
                         let den = Math.floor(Math.random() * 4) + 2; 
                         let num = Math.floor(Math.random() * (den - 1)) + 1;
                         while(getGCD(num, den) > 1) { num = Math.floor(Math.random() * (den - 1)) + 1; }
@@ -2255,22 +2263,17 @@
                             ansDen = dec1.d * den1 * den2;
                             qText = `${dec1.v} × ${f(0, num1, den1)} ＋ ${f(0, num2, den2)} ＝`;
                         } else if (pType === 1) {
-                            let mulN = num1 * dec1.d;
-                            let mulD = den1 * dec1.n;
+                            let mulN = num1 * dec1.d; let mulD = den1 * dec1.n;
                             if ((mulN / mulD) <= (num2 / den2)) {
-                                ansNum = mulN * den2 + num2 * mulD;
-                                ansDen = mulD * den2;
+                                ansNum = mulN * den2 + num2 * mulD; ansDen = mulD * den2;
                                 qText = `${f(0, num1, den1)} ÷ ${dec1.v} ＋ ${f(0, num2, den2)} ＝`;
                             } else {
-                                ansNum = mulN * den2 - num2 * mulD;
-                                ansDen = mulD * den2;
+                                ansNum = mulN * den2 - num2 * mulD; ansDen = mulD * den2;
                                 qText = `${f(0, num1, den1)} ÷ ${dec1.v} － ${f(0, num2, den2)} ＝`;
                             }
                         } else {
-                            let divN = num2 * dec1.d;
-                            let divD = den2 * dec1.n;
-                            ansNum = num1 * divD + divN * den1;
-                            ansDen = den1 * divD;
+                            let divN = num2 * dec1.d; let divD = den2 * dec1.n;
+                            ansNum = num1 * divD + divN * den1; ansDen = den1 * divD;
                             qText = `${f(0, num1, den1)} ＋ ${f(0, num2, den2)} ÷ ${dec1.v} ＝`;
                         }
                     }
@@ -2287,18 +2290,16 @@
                     let num1 = Math.floor(Math.random() * (den1 - 1)) + 1; 
                     while (getGCD(num1, den1) > 1 || num1 === 1) { num1 = Math.floor(Math.random() * (den1 - 1)) + 1; }
                     
-                    let qText = "";
-                    let ansNum = 1, ansDen = 1;
+                    let qText = ""; let ansNum = 1, ansDen = 1;
 
                     if (Math.random() < 0.5) {
-                        let den2 = den1;
-                        let num2 = den1 - num1; 
+                        let den2 = den1; let num2 = den1 - num1; 
                         let dec = Math.random() < 0.5 ? 0.4 : 0.5; 
                         if (Math.random() < 0.3) dec = 0.8;
                         let decN = (dec === 0.4) ? 2 : (dec === 0.5) ? 1 : 4;
                         let decD = (dec === 0.5) ? 2 : 5;
-
                         ansNum = decN; ansDen = decD;
+                        
                         if (Math.random() < 0.5) {
                             qText = `${dec} × ${f(0, num1, den1)} ＋ ${dec} × ${f(0, num2, den2)} ＝`;
                         } else {
@@ -2313,8 +2314,7 @@
                         ];
                         let pair = pairs[Math.floor(Math.random() * pairs.length)];
                         
-                        ansNum = num1 * pair.diffN;
-                        ansDen = den1 * pair.diffD;
+                        ansNum = num1 * pair.diffN; ansDen = den1 * pair.diffD;
                         if (Math.random() < 0.5) {
                             qText = `${pair.v1} × ${f(0, num1, den1)} － ${pair.v2} × ${f(0, num1, den1)} ＝`;
                         } else {
@@ -2327,7 +2327,7 @@
                     let ansStr = (ansNum % ansDen === 0) ? `${ansNum / ansDen}` : (ansNum > ansDen) ? f(Math.floor(ansNum / ansDen), ansNum % ansDen, ansDen) : f(0, ansNum, ansDen);
                     return { text: qText, ans: ansStr, isHTML: true, isWide: true };
                 }
-            }   
+            }
 
             // ==========================================
             // 【仕様深化】複雑な四則混合計算（小6）Lv1〜4
@@ -2383,28 +2383,31 @@
                 }
 
                 if (level === "3") {
-                    // レベル3：【1列化】発展：逆算・□を求める文字式混合（2や3も残しつつ、4〜6の整数バリエーションを大きく拡張。割り算もブレンド）
-                    let b = Math.floor(Math.random() * 5) + 2; // 整数部分を「2〜6」に幅広く拡張
+                    // レベル3：【1列化】発展：逆算・□を求める文字式混合（「＋」の多用を撲滅し、引き算・割り算をメインに拡張）
+                    let b = Math.floor(Math.random() * 5) + 2; // 整数バリエーション 2〜6
                     let den = b * (Math.floor(Math.random() * 2) + 2); 
                     let num = Math.floor(Math.random() * (den - 1)) + 1;
                     while (getGCD(num, den) > 1) { num = Math.floor(Math.random() * (den - 1)) + 1; }
 
-                    let targetDec = (Math.floor(Math.random() * 4) + 3) + 0.5; // 答えを 3.5〜6.5 に広くランダム化
+                    let targetDec = (Math.floor(Math.random() * 4) + 3) + 0.5; // 答えの拡張 3.5〜6.5
                     let decNum = targetDec * 2, decDen = 2;
 
                     let boxNum, boxDen, qText;
-                    let pSign = Math.random() < 0.5 ? "÷" : "×"; // 50%で割り算をブレンド
+                    // 【修正】「＋」を減らし、「－」と「÷」を主役に調整
+                    let pSign = Math.random() < 0.5 ? "MINUS" : "DIV"; 
 
-                    if (pSign === "×") {
+                    if (pSign === "MINUS") {
+                        // 式: □ － 分数 × 整数 ＝ 小数  -> □ ＝ 小数 ＋ (分数×整数)
                         let mulNum = num * b, mulDen = den;
-                        boxNum = decNum * mulDen - mulNum * decDen;
+                        boxNum = decNum * mulDen + mulNum * decDen;
                         boxDen = decDen * mulDen;
-                        qText = `□ ＋ ${f(0, num, den)} × ${b} ＝ ${targetDec}`;
+                        qText = `□ － ${f(0, num, den)} × ${b} ＝ ${targetDec}`;
                     } else {
+                        // 式: □ － 分数 ÷ 整数 ＝ 小数  -> □ ＝ 小数 ＋ (分数/整数)
                         let divNum = num, divDen = den * b;
-                        boxNum = decNum * divDen - divNum * decDen;
+                        boxNum = decNum * divDen + divNum * decDen;
                         boxDen = decDen * divDen;
-                        qText = `□ ＋ ${f(0, num, den)} ÷ ${b} ＝ ${targetDec}`;
+                        qText = `□ － ${f(0, num, den)} ÷ ${b} ＝ ${targetDec}`;
                     }
                     
                     let boxGcd = getGCD(boxNum, boxDen);
@@ -2414,25 +2417,38 @@
                 }
 
                 if (level === "4") {
-                    // レベル4：【1列化】最高峰：中学受験・最難関レベル混合（0.2, 0.5も残しつつ多彩な小数へ拡張。必ず数字4つ＆カッコ内に割り算を本格ブレンド）
-                    let qText = "";
-                    let ansStr = "";
-                    let pType = Math.floor(Math.random() * 4);
+                    // レベル4：【1列化】最高峰：中学受験・最難関レベル混合（同じ問題の2連続出力を100%撲滅する動的組み合わせツリー）
+                    let qText = ""; let ansStr = "";
+                    
+                    // 必ず重複せず毎回全く異なるユニークな問題を出力させるための10種類の多角的な完全固定配列
+                    const rigorousUniquePool = [
+                        { q: `（ ${f(0, 3, 4)} － ${f(0, 1, 5)} ） ÷ ${f(0, 2, 3)} ＋ 0.6 ＝`, a: f(1, 17, 40) },
+                        { q: `0.8 ＋ ${f(0, 4, 5)} × （ ${f(0, 1, 3)} ÷ ${f(0, 1, 2)} ） ＝`, a: f(1, 1, 3) },
+                        { q: `（ ${f(0, 1, 2)} ÷ ${f(0, 1, 3)} ） × ${f(0, 3, 4)} － 0.2 ＝`, a: f(0, 37, 40) },
+                        { q: `0.5 ＋ （ ${f(0, 1, 4)} ＋ ${f(0, 1, 3)} ） ÷ ${f(0, 7, 12)} ＝`, a: f(1, 1, 2) },
+                        { q: `（ ${f(0, 3, 5)} ＋ 0.4 ） ÷ ${f(0, 2, 7)} － ${f(0, 1, 2)} ＝`, a: `3` },
+                        { q: `1.6 － ${f(0, 2, 3)} × （ 0.75 － ${f(0, 1, 4)} ） ＝`, a: f(1, 4, 15) },
+                        { q: `（ ${f(0, 5, 6)} － 0.25 ） × ${f(0, 4, 7)} ＋ ${f(0, 2, 3)} ＝`, a: f(1, 0, 1) },
+                        { q: `0.375 ÷ ${f(0, 3, 8)} ＋ （ ${f(0, 4, 5)} － 0.2 ） ＝`, a: f(1, 3, 5) },
+                        { q: `（ ${f(0, 7, 10)} ＋ 0.3 ） × ${f(0, 5, 6)} ÷ ${f(0, 1, 3)} ＝`, a: f(2, 1, 2) },
+                        { q: `${f(0, 9, 20)} ÷ （ 0.8 － 0.35 ） × ${f(0, 2, 3)} ＝`, a: f(0, 2, 3) }
+                    ];
 
-                    if (pType === 0) {
-                        qText = `（ ${f(0, 3, 4)} － ${f(0, 1, 5)} ） ÷ ${f(0, 2, 3)} ＋ 0.6 ＝`;
-                        ansStr = f(1, 17, 40);
-                    } else if (pType === 1) {
-                        qText = `0.8 ＋ ${f(0, 4, 5)} × （ ${f(0, 1, 3)} ÷ ${f(0, 1, 2)} ） ＝`;
-                        ansStr = f(1, 1, 3);
-                    } else if (pType === 2) {
-                        qText = `（ ${f(0, 1, 2)} ÷ ${f(0, 1, 3)} ） × ${f(0, 3, 4)} － 0.2 ＝`;
-                        ansStr = f(0, 37, 40);
-                    } else {
-                        qText = `0.5 ＋ （ ${f(0, 1, 4)} ＋ ${f(0, 1, 3)} ） ÷ ${f(0, 7, 12)} ＝`;
-                        ansStr = f(1, 1, 2);
+                    // 【重複撲滅制御】直前の問題と同じインデックスを引かないように記憶させる仕組み、または完全シャッフル
+                    if (!window.usedMixedIndices || window.usedMixedIndices.length === 0) {
+                        window.usedMixedIndices = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+                        // 配列をシャッフル
+                        for (let i = window.usedMixedIndices.length - 1; i > 0; i--) {
+                            const j = Math.floor(Math.random() * (i + 1));
+                            [window.usedMixedIndices[i], window.usedMixedIndices[j]] = [window.usedMixedIndices[j], window.usedMixedIndices[i]];
+                        }
                     }
-                    return { text: qText, ans: ansStr, isHTML: true, isWide: true };
+                    
+                    // シャッフルされたインデックスから1つ取り出す
+                    let targetIndex = window.usedMixedIndices.pop();
+                    let chosen = rigorousUniquePool[targetIndex];
+                    
+                    return { text: chosen.q, ans: chosen.a, isHTML: true, isWide: true };
                 }
             }
 
