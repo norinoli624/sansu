@@ -2133,8 +2133,8 @@
                 };
 
                 if (level === "1") {
-                    // レベル1：【1列化】分数と小数の加減計算・基本（並び順・記号を完全シャッフル）
-                    let den = Math.floor(Math.random() * 4) + 3; // 分母 3〜6
+                    // レベル1：【1列化】分数と小数の加減計算・基本（分数先・小数先・足し引きを完全網羅）
+                    let den = Math.floor(Math.random() * 4) + 3; 
                     let num = Math.floor(Math.random() * (den - 1)) + 1;
                     while (getGCD(num, den) > 1) { num = Math.floor(Math.random() * (den - 1)) + 1; }
                     
@@ -2143,14 +2143,13 @@
 
                     let ansNum, ansDen, qText;
                     let pSign = Math.random() < 0.5 ? "＋" : "－";
-                    let pOrder = Math.random() < 0.5 ? "F_D" : "D_F"; // 分数/小数 の順
+                    let pOrder = Math.random() < 0.5 ? "F_D" : "D_F";
 
                     if (pSign === "＋") {
                         ansNum = num * dec.d + dec.n * den;
                         ansDen = den * dec.d;
                         qText = (pOrder === "F_D") ? `${f(0, num, den)} ＋ ${dec.v} ＝` : `${dec.v} ＋ ${f(0, num, den)} ＝`;
                     } else {
-                        // 引き算（破綻防止：大きい数から引く）
                         if (pOrder === "F_D") {
                             while (num / den <= dec.v) {
                                 den = Math.floor(Math.random() * 4) + 3;
@@ -2175,8 +2174,8 @@
                 }
 
                 if (level === "2") {
-                    // レベル2：【1列化】分数と小数の乗除計算・基本（並び順・記号を完全シャッフル）
-                    let den = Math.floor(Math.random() * 5) + 3; // 分母 3〜7
+                    // レベル2：【1列化】分数と小数の乗除計算・基本（分数先・小数先・乗除を完全シャッフル）
+                    let den = Math.floor(Math.random() * 5) + 3; 
                     let num = Math.floor(Math.random() * (den - 1)) + 1;
                     while (getGCD(num, den) > 1) { num = Math.floor(Math.random() * (den - 1)) + 1; }
                     
@@ -2192,7 +2191,6 @@
                         ansDen = den * dec.d;
                         qText = (pOrder === "F_D") ? `${f(0, num, den)} × ${dec.v} ＝` : `${dec.v} × ${f(0, num, den)} ＝`;
                     } else {
-                        // 割り算
                         if (pOrder === "F_D") {
                             ansNum = num * dec.d;
                             ansDen = den * dec.n;
@@ -2210,8 +2208,7 @@
                 }
 
                 if (level === "3") {
-                    // レベル3：【1列化】分数・小数3つの加減乗除混合（記号・配置・小数の種類を完全ランダム化）
-                    // 破綻撲滅のため精緻化した複数の計算ツリーからランダム出題
+                    // レベル3：【1列化】分数・小数3つの加減乗除混合（0.5以外の小数拡張・並び順・記号完全ランダム）
                     const decChoices = [{v: 0.2, n: 1, d: 5}, {v: 0.4, n: 2, d: 5}, {v: 0.25, n: 1, d: 4}, {v: 0.75, n: 3, d: 4}, {v: 0.6, n: 3, d: 5}];
                     let dec = decChoices[Math.floor(Math.random() * decChoices.length)];
                     
@@ -2227,16 +2224,13 @@
                     let pType = Math.floor(Math.random() * 3);
 
                     if (pType === 0) {
-                        // パターン0: 小数 × 分数1 ＋ 分数2
                         ansNum = (dec.n * num1 * den2) + (num2 * dec.d * den1);
                         ansDen = dec.d * den1 * den2;
                         qText = `${dec.v} × ${f(0, num1, den1)} ＋ ${f(0, num2, den2)} ＝`;
                     } else if (pType === 1) {
-                        // パターン1: 分数1 ÷ 小数 － 分数2
                         let mulN = num1 * dec.d;
                         let mulD = den1 * dec.n;
                         if ((mulN / mulD) <= (num2 / den2)) {
-                            // 引き算でマイナスにならないよう足し算へ安全エスケープ
                             ansNum = mulN * den2 + num2 * mulD;
                             ansDen = mulD * den2;
                             qText = `${f(0, num1, den1)} ÷ ${dec.v} ＋ ${f(0, num2, den2)} ＝`;
@@ -2246,7 +2240,6 @@
                             qText = `${f(0, num1, den1)} ÷ ${dec.v} － ${f(0, num2, den2)} ＝`;
                         }
                     } else {
-                        // パターン2: 分数1 ＋ 分数2 ÷ 小数
                         let divN = num2 * dec.d;
                         let divD = den2 * dec.n;
                         ansNum = num1 * divD + divN * den1;
@@ -2259,30 +2252,27 @@
                     let ansStr = (ansNum % ansDen === 0) ? `${ansNum / ansDen}` : (ansNum > ansDen) ? f(Math.floor(ansNum / ansDen), ansNum % ansDen, ansDen) : f(0, ansNum, ansDen);
                     return { text: qText, ans: ansStr, isHTML: true, isWide: true };
                 }
+
                 if (level === "4") {
-                    // レベル4：【1列化】最高峰：計算の工夫・分配法則（同じ分数を排除、分子も1以外へ拡張、記号シャッフル）
-                    // 式A: 分数1 × 小数 ＋ 分数2 × 小数  ➔ (分数1 ＋ 分数2) × 小数
-                    // 式B: 分数1 × 小数1 － 分数1 × 小数2 ➔ 分数1 × (小数1 － 小数2)
+                    // レベル4：【1列化】最高峰：計算の工夫・分配法則（同じ分数を完全排除、分子も1以外へ拡張、記号シャッフル）
                     let den1 = Math.floor(Math.random() * 3) + 3; // 分母 3〜5
-                    let num1 = Math.floor(Math.random() * (den1 - 1)) + 1; // 分子を1以外へ
+                    let num1 = Math.floor(Math.random() * (den1 - 1)) + 1; // 分子を1以外に
                     while (getGCD(num1, den1) > 1 || num1 === 1) { num1 = Math.floor(Math.random() * (den1 - 1)) + 1; }
                     
                     let qText = "";
                     let ansNum = 1, ansDen = 1;
 
                     if (Math.random() < 0.5) {
-                        // 工夫パターンA（足し算）：(分数1 + 分数2) が整数か綺麗に収まる形
-                        // 1/5 + 4/5 などの構造を作る
+                        // 分配法則（足し算）：(分数1 + 分数2) が整数1になる美構造
                         let den2 = den1;
-                        let num2 = den1 - num1; // 共通の分母で足して1になる別分数
+                        let num2 = den1 - num1; 
                         let dec = Math.random() < 0.5 ? 0.4 : 0.8;
                         let decN = dec === 0.4 ? 2 : 4, decD = 5;
 
-                        // (num1/den1 + num2/den2) * dec = 1 * dec = dec
                         ansNum = decN; ansDen = decD;
                         qText = `${f(0, num1, den1)} × ${dec} ＋ ${f(0, num2, den2)} × ${dec} ＝`;
                     } else {
-                        // 工夫パターンB（引き算）：共通の分数1 × (小数1 - 小数2)
+                        // 分配法則（引き算）：共通の分数1 × (小数1 - 小数2)
                         const pairs = [{v1: 0.75, v2: 0.25, diffN: 1, diffD: 2}, {v1: 0.8, v2: 0.3, diffN: 1, diffD: 2}, {v1: 0.6, v2: 0.1, diffN: 1, diffD: 2}];
                         let pair = pairs[Math.floor(Math.random() * pairs.length)];
                         
@@ -2297,7 +2287,6 @@
                     return { text: qText, ans: ansStr, isHTML: true, isWide: true };
                 }
             }
-
             // ==========================================
             // 【仕様深化】複雑な四則混合計算（小6）Lv1〜4
             // ==========================================
@@ -2310,7 +2299,7 @@
 
                 if (level === "1") {
                     // レベル1：【1列化】基礎：カッコのある分数・小数の3数混合
-                    let den = Math.floor(Math.random() * 4) + 3; 
+                    let den = Math.floor(Math.random() * 4) + 3; // 分母 3〜6
                     let num = Math.floor(Math.random() * (den - 1)) + 1;
                     while (getGCD(num, den) > 1) { num = Math.floor(Math.random() * (den - 1)) + 1; }
                     
@@ -2339,7 +2328,7 @@
                 }
 
                 if (level === "2") {
-                    // レベル2：【1列化】応用：分数・小数の4数四則混合計算（4つ以上の異なる式ツリーを定義してバリエーションを最大化）
+                    // レベル2：【1列化】応用：分数・小数の4数四則混合計算（異なる5つの式ツリーでバリエーション最大化）
                     const variations = [
                         { q: `${f(0, 1, 3)} × 2 ＋ 0.5 ÷ ${f(0, 1, 2)} ＝`, a: f(1, 2, 3) }, 
                         { q: `${f(0, 1, 4)} × 3 ＋ 0.25 ÷ ${f(0, 1, 3)} ＝`, a: f(1, 1, 2) }, 
@@ -2352,7 +2341,7 @@
                 }
 
                 if (level === "3") {
-                    // レベル3：【1列化】発展：逆算・□を求める文字式混合（割り算を厳格にブレンド）
+                    // レベル3：【1列化】発展：逆算・□を求める文字式混合（割り算も盛り込んでブレンド）
                     let b = Math.floor(Math.random() * 2) + 2; // 2〜3
                     let den = b * (Math.floor(Math.random() * 2) + 2); 
                     let num = Math.floor(Math.random() * (den - 1)) + 1;
@@ -2362,16 +2351,12 @@
                     let decNum = targetDec * 2, decDen = 2;
 
                     let boxNum, boxDen, qText;
-                    let pSign = Math.random() < 0.5 ? "÷" : "×"; // 割り算ブレンド
-
-                    if (pSign === "×") {
-                        // □ ＋ 分数 × 整数 ＝ 小数
+                    if (Math.random() < 0.5) {
                         let mulNum = num * b, mulDen = den;
                         boxNum = decNum * mulDen - mulNum * decDen;
                         boxDen = decDen * mulDen;
                         qText = `□ ＋ ${f(0, num, den)} × ${b} ＝ ${targetDec}`;
                     } else {
-                        // □ ＋ 分数 ÷ 整数 ＝ 小数 -> □ ＝ 小数 － (分数/整数)
                         let divNum = num, divDen = den * b;
                         boxNum = decNum * divDen - divNum * decDen;
                         boxDen = decDen * divDen;
@@ -2385,28 +2370,17 @@
                 }
 
                 if (level === "4") {
-                    // レベル4：【1列化】最高峰：中学受験・最難関レベル混合（必ず数字4つ、カッコ位置2パターンを動的にシャッフル）
-                    let d1 = 3, d2 = 4, d3 = 5;
-                    let n1 = 2, n2 = 3, n3 = 2; // 分子を1以外へ
-                    let dec = 0.5; // 4つ目の数字
-                    
-                    let qText = "";
-                    let ansStr = "";
-
+                    // レベル4：【1列化】最高峰：中学受験・最難関レベル混合（必ず数字4つ、カッコ位置も動的にシャッフル）
+                    let qText = "", ansStr = "";
                     if (Math.random() < 0.5) {
-                        // カッコパターン1: 前方に配置 ➔ ( 分数1 － 分数2 ) × 分数3 ＋ 小数
-                        // (2/3 - 1/4) * 2/5 + 0.5 = (5/12) * 2/5 + 1/2 = 1/6 + 1/2 = 2/3
-                        n1 = 2; d1 = 3; n2 = 1; d2 = 4; n3 = 2; d3 = 5; dec = 0.5;
-                        qText = `（ ${f(0, n1, d1)} － ${f(0, n2, d2)} ） × ${f(0, n3, d3)} ＋ ${dec} ＝`;
+                        // カッコ前方配置パターン
+                        qText = `（ ${f(0, 2, 3)} － ${f(0, 1, 4)} ） × ${f(0, 2, 5)} ＋ 0.5 ＝`;
                         ansStr = f(0, 2, 3);
                     } else {
-                        // カッコパターン2: 後方に配置 ➔ 小数 ＋ 分数1 × ( 分数2 ＋ 分数3 )
-                        // 0.2 + 2/3 * (1/4 + 1/2) = 1/5 + 2/3 * (3/4) = 1/5 + 1/2 = 7/10
-                        dec = 0.2; n1 = 2; d1 = 3; n2 = 1; d2 = 4; n3 = 1; d3 = 2;
-                        qText = `${dec} ＋ ${f(0, n1, d1)} × （ ${f(0, n2, d2)} ＋ ${f(0, n3, d3)} ） ＝`;
+                        // カッコ後方配置パターン
+                        qText = `0.2 ＋ ${f(0, 2, 3)} × （ ${f(0, 1, 4)} ＋ ${f(0, 1, 2)} ） ＝`;
                         ansStr = f(0, 7, 10);
                     }
-                    
                     return { text: qText, ans: ansStr, isHTML: true, isWide: true };
                 }
             }
