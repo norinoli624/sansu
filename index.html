@@ -1692,41 +1692,51 @@
                 }
 
                 if (level === "3") {
-                    // 【修正】分数の分母・分子を1〜9の範囲に拡大。小数のバリエーションも増加
+                    // 【修正】分数の分母・分子を1〜9に広げつつ、足し算・引き算のバリエーションをランダム化
                     const decChoices = [
                         {v: 0.2, n: 1, d: 5}, {v: 0.4, n: 2, d: 5}, {v: 0.6, n: 3, d: 5},
                         {v: 0.25, n: 1, d: 4}, {v: 0.5, n: 1, d: 2}, {v: 0.75, n: 3, d: 4}
                     ];
                     let dec = decChoices[Math.floor(Math.random() * decChoices.length)];
                 
-                    // 分母・分子を1〜9の範囲で通分可能なように安全に生成
                     let den1 = Math.floor(Math.random() * 5) + 5; // 5〜9
-                    let num1 = Math.floor(Math.random() * (den1 - 1)) + 1; // 1 〜 den1-1
+                    let num1 = Math.floor(Math.random() * (den1 - 1)) + 1; 
                     let den2 = Math.floor(Math.random() * 3) + 2; // 2〜4
                     let num2 = Math.floor(Math.random() * (den2 - 1)) + 1; 
                 
                     while (getGCD(num1, den1) > 1) { num1 = Math.floor(Math.random() * (den1 - 1)) + 1; }
                     while (getGCD(num2, den2) > 1) { num2 = Math.floor(Math.random() * (den2 - 1)) + 1; }
                 
-                    // 式: 分数1 ＋ 分数2 － 小数
-                    let ansNum = (num1 * den2 * dec.d) + (num2 * den1 * dec.d) - (dec.n * den1 * den2);
-                    let ansDen = den1 * den2 * dec.d;
-                
-                    // 引き算で答えがマイナスになる破綻を防ぐための安全弁
-                    if (ansNum <= 0) {
-                        // マイナスになりそうな場合は足し算に変更
-                        ansNum = (num1 * den2 * dec.d) + (num2 * den1 * dec.d) + (dec.n * den1 * den2);
-                        let gcd = getGCD(ansNum, ansDen);
-                        ansNum /= gcd; ansDen /= gcd;
-                        let ansStr = (ansNum % ansDen === 0) ? `${ansNum / ansDen}` : (ansNum > ansDen) ? f(Math.floor(ansNum / ansDen), ansNum % ansDen, ansDen) : f(0, num1, den1);
-                        return { text: `${f(0, num1, den1)} ＋ ${f(0, num2, den2)} ＋ ${dec.v} ＝`, ans: ansStr, isHTML: true };
+                    let ansNum, ansDen, qText;
+                    ansDen = den1 * den2 * dec.d;
+
+                    // 50%の確率で「引き算スタート」と「足し算スタート」を分岐
+                    if (Math.random() < 0.5) {
+                        // パターンA: 分数1 － 分数2 ＋ 小数
+                        // 数理破綻（マイナス）を防ぐため、分数1 ＞ 分数2 になるよう調整
+                        if ((num1 / den1) < (num2 / den2)) {
+                            let tempN = num1; num1 = num2; num2 = tempN;
+                            let tempD = den1; den1 = den2; den2 = tempD;
+                        }
+                        ansNum = (num1 * den2 * dec.d) - (num2 * den1 * dec.d) + (dec.n * den1 * den2);
+                        qText = `${f(0, num1, den1)} － ${f(0, num2, den2)} ＋ ${dec.v} ＝`;
+                    } else {
+                        // パターンB: 分数1 ＋ 分数2 － 小数
+                        ansNum = (num1 * den2 * dec.d) + (num2 * den1 * dec.d) - (dec.n * den1 * den2);
+                        qText = `${f(0, num1, den1)} ＋ ${f(0, num2, den2)} － ${dec.v} ＝`;
+                    
+                        // 安全弁：万が一マイナスになる場合はすべて足し算にする
+                        if (ansNum <= 0) {
+                            ansNum = (num1 * den2 * dec.d) + (num2 * den1 * den2) + (dec.n * den1 * den2);
+                            qText = `${f(0, num1, den1)} ＋ ${f(0, num2, den2)} ＋ ${dec.v} ＝`;
+                        }
                     }
                 
                     let gcd = getGCD(ansNum, ansDen);
                     ansNum /= gcd; ansDen /= gcd;
                     let ansStr = (ansNum % ansDen === 0) ? `${ansNum / ansDen}` : (ansNum > ansDen) ? f(Math.floor(ansNum / ansDen), ansNum % ansDen, ansDen) : f(0, ansNum, ansDen);
 
-                    return { text: `${f(0, num1, den1)} ＋ ${f(0, num2, den2)} － ${dec.v} ＝`, ans: ansStr, isHTML: true };
+                    return { text: qText, ans: ansStr, isHTML: true };
                 }
 
                 if (level === "4") {
@@ -2197,63 +2207,98 @@
                     return `<span class="fraction-whole">${w}</span><span class="fraction"><span class="numerator">${n}</span><span class="denominator">${den}</span></span>`;
                 };
 
-                // ※レベル1〜3のロジックが既にある場合は、ここ（level === "4"）のみを差し替えてください
+                if (level === "1") {
+                    // レベル1：分数と整数の2段階（足し算・引き算混合）
+                    let den = Math.floor(Math.random() * 5) + 3; // 3〜7
+                    let num = Math.floor(Math.random() * (den - 1)) + 1;
+                    let k = Math.floor(Math.random() * 3) + 1; // 整数 1〜3
+                    let k2 = Math.floor(Math.random() * 2) + 1;
+                    
+                    let ansNum = (k + k2) * den - num;
+                    let gcd = getGCD(ansNum, den);
+                    let ansStr = (ansNum % den === 0) ? `${ansNum / den}` : f(Math.floor(ansNum / den), ansNum % gcd, den / gcd);
+                    return { text: `${k} ＋ ${k2} － ${f(0, num, den)} ＝`, ans: ansStr, isHTML: true };
+                }
+
+                if (level === "2") {
+                    // レベル2：分数と小数の2段階（掛け算・割り算）
+                    const decChoices = [{v: 0.5, n: 1, d: 2}, {v: 0.25, n: 1, d: 4}, {v: 0.75, n: 3, d: 4}];
+                    let dec = decChoices[Math.floor(Math.random() * decChoices.length)];
+                    let den = Math.floor(Math.random() * 4) + 3; // 3〜6
+                    let num = Math.floor(Math.random() * (den - 1)) + 1;
+                    
+                    // 式: 分数 ÷ 小数 
+                    let ansNum = num * dec.d;
+                    let ansDen = den * dec.n;
+                    let gcd = getGCD(ansNum, ansDen);
+                    let ansStr = (ansNum % ansDen === 0) ? `${ansNum / ansDen}` : f(Math.floor(ansNum / ansDen), (ansNum / gcd) % (ansDen / gcd), ansDen / gcd);
+                    return { text: `${f(0, num, den)} ÷ ${dec.v} ＝`, ans: ansStr, isHTML: true };
+                }
+
+                if (level === "3") {
+                    // レベル3：3つの分数の四則混合計算
+                    let den1 = 2, den2 = 3, den3 = 4;
+                    let num1 = 1, num2 = Math.floor(Math.random() * 2) + 1, num3 = 1; // 1/2, (1/3 or 2/3), 1/4
+                    
+                    // 式: 1/2 ＋ 1/3 × 1/4 = 1/2 + 1/12 = 7/12
+                    let mulNum = num2 * num3;
+                    let mulDen = den2 * den3;
+                    let ansNum = num1 * mulDen + mulNum * den1;
+                    let ansDen = den1 * mulDen;
+                    let gcd = getGCD(ansNum, ansDen);
+                    let ansStr = f(0, ansNum / gcd, ansDen / gcd);
+                    return { text: `${f(0, num1, den1)} ＋ ${f(0, num2, den2)} × ${f(0, num3, den3)} ＝`, ans: ansStr, isHTML: true };
+                }
+
                 if (level === "4") {
-                // 【最難関レベル：分数と小数の3段階四則混合混合（強制異分母）】
-                // ①分母のバリエーションを最大20まで拡大
-                let d1 = Math.floor(Math.random() * 11) + 10; // 分母1 (10〜20)
-                let d2 = Math.floor(Math.random() * 6) + 4;   // 分母2 (4〜9)
-                while (d1 === d2 || getGCD(d1, d2) > 2) {
-                    d2 = Math.floor(Math.random() * 6) + 4; 
-                }
+                    // 【最難関レベル：分数と小数の3段階四則混合混合（強制異分母）】
+                    let d1 = Math.floor(Math.random() * 11) + 10; // 分母1 (10〜20)
+                    let d2 = Math.floor(Math.random() * 6) + 4;   // 分母2 (4〜9)
+                    while (d1 === d2 || getGCD(d1, d2) > 2) {
+                        d2 = Math.floor(Math.random() * 6) + 4; 
+                    }
 
-                // ②分子のバリエーションを「2以上（1以外）」で動的生成
-                let n1 = Math.floor(Math.random() * (d1 - 3)) + 2; 
-                let n2 = Math.floor(Math.random() * (d2 - 2)) + 2; 
-                
-                // 整数部分の定義（帯分数化）
-                let w1 = Math.floor(Math.random() * 2) + 1; 
-                let w2 = Math.floor(Math.random() * 2) + 1; 
+                    let n1 = Math.floor(Math.random() * (d1 - 3)) + 2; 
+                    let n2 = Math.floor(Math.random() * (d2 - 2)) + 2; 
+                    let w1 = Math.floor(Math.random() * 2) + 1; 
+                    let w2 = Math.floor(Math.random() * 2) + 1; 
 
-                // 【修正】0.25刻み以外のマイルドな小数をバリエーションに大量追加
-                const decChoices = [
-                    {v: 0.2, n: 1, d: 5}, {v: 0.4, n: 2, d: 5}, {v: 0.6, n: 3, d: 5}, {v: 0.8, n: 4, d: 5},
-                    {v: 0.25, n: 1, d: 4}, {v: 0.75, n: 3, d: 4}, {v: 0.5, n: 1, d: 2},
-                    {v: 0.125, n: 1, d: 8}, {v: 0.375, n: 3, d: 8}
-                ];
-                let decObj = decChoices[Math.floor(Math.random() * decChoices.length)];
+                    const decChoices = [
+                        {v: 0.2, n: 1, d: 5}, {v: 0.4, n: 2, d: 5}, {v: 0.6, n: 3, d: 5}, {v: 0.8, n: 4, d: 5},
+                        {v: 0.25, n: 1, d: 4}, {v: 0.75, n: 3, d: 4}, {v: 0.5, n: 1, d: 2},
+                        {v: 0.125, n: 1, d: 8}, {v: 0.375, n: 3, d: 8}
+                    ];
+                    let decObj = decChoices[Math.floor(Math.random() * decChoices.length)];
 
-                // 通分逆算による答えの自動算出ロジック
-                let improperN1 = w1 * d1 + n1;
-                let improperN2 = w2 * d2 + n2;
-                
-                let lcm = (d1 * d2) / getGCD(d1, d2);
-                let v1 = improperN1 * (lcm / d1);
-                let v2 = improperN2 * (lcm / d2);
-                
-                if (v1 <= v2) {
-                    let temp = improperN1; improperN1 = improperN2; improperN2 = temp;
-                    let tempD = d1; d1 = d2; d2 = tempD;
-                    let tempN = n1; n1 = n2; n2 = tempN;
-                    let tempW = w1; w1 = w2; w2 = tempW;
-                    let tempV = v1; v1 = v2; v2 = tempV;
-                }
+                    let improperN1 = w1 * d1 + n1;
+                    let improperN2 = w2 * d2 + n2;
+                    
+                    let lcm = (d1 * d2) / getGCD(d1, d2);
+                    let v1 = improperN1 * (lcm / d1);
+                    let v2 = improperN2 * (lcm / d2);
+                    
+                    if (v1 <= v2) {
+                        let temp = improperN1; improperN1 = improperN2; improperN2 = temp;
+                        let tempD = d1; d1 = d2; d2 = tempD;
+                        let tempN = n1; n1 = n2; n2 = tempN;
+                        let tempW = w1; w1 = w2; w2 = tempW;
+                        let tempV = v1; v1 = v2; v2 = tempV;
+                    }
 
-                let diffNum = v1 - v2;
-                let diffDen = lcm;
+                    let diffNum = v1 - v2;
+                    let diffDen = lcm;
 
-                let finalNum = diffNum * decObj.n;
-                let finalDen = diffDen * decObj.d;
+                    let finalNum = diffNum * decObj.n;
+                    let finalDen = diffDen * decObj.d;
 
-                let finalGCD = getGCD(finalNum, finalDen);
-                finalNum /= finalGCD;
-                finalDen /= finalGCD;
+                    let finalGCD = getGCD(finalNum, finalDen);
+                    finalNum /= finalGCD;
+                    finalDen /= finalGCD;
 
-                let ansStr = (finalNum % finalDen === 0) ? `${finalNum / finalDen}` : (finalNum > finalDen) ? f(Math.floor(finalNum / finalDen), finalNum % finalDen, finalDen) : f(0, finalNum, finalDen);
-                
-                let qText = `（ ${f(w1, n1, d1)} － ${f(w2, n2, d2)} ） × ${decObj.v} ＝`;
-                
-                return { text: qText, ans: ansStr, isHTML: true, isWide: true };
+                    let ansStr = (finalNum % finalDen === 0) ? `${finalNum / finalDen}` : (finalNum > finalDen) ? f(Math.floor(finalNum / finalDen), finalNum % finalDen, finalDen) : f(0, finalNum, finalDen);
+                    let qText = `（ ${f(w1, n1, d1)} － ${f(w2, n2, d2)} ） × ${decObj.v} ＝`;
+                    
+                    return { text: qText, ans: ansStr, isHTML: true, isWide: true };
                 }
             }
 
@@ -2406,10 +2451,15 @@
                     aListContainer.style.gridTemplateColumns = "1fr 1fr";
                 }
                 
-                // 問題数（行数）に応じて上下の隙間（gap）や高さを動的に最適化し、A4用紙1枚へのジャスト収まりを制御
+                // 【修正】1列化（Wide）または問題数が多い場合に、縦幅を最適化して10問すべてを1ページに収める
                 let rowGap = "clamp(15px, 4vh, 35px)";
                 let itemPadding = "12px 0";
-                if (qCount > 14) {
+                
+                if (hasWideQuestion || qCount === 10) {
+                    // 1列化専用のタイトな余白設定（はみ出しを完全に防止）
+                    rowGap = "clamp(10px, 2.5vh, 18px)";
+                    itemPadding = "8px 0";
+                } else if (qCount > 14) {
                     rowGap = "clamp(8px, 2vh, 16px)";
                     itemPadding = "6px 0";
                 }
