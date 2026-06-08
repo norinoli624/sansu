@@ -2133,31 +2133,42 @@
                 };
 
                 if (level === "1") {
-                    // レベル1：【1列化】分数と小数の加減計算・基本（無限ループバグを完全修正）
-                    const decChoices = [{v: 0.2, n: 1, d: 5}, {v: 0.4, n: 2, d: 5}, {v: 0.5, n: 1, d: 2}, {v: 0.25, n: 1, d: 4}];
-                    let dec = decChoices[Math.floor(Math.random() * decChoices.length)];
-                    
+                    // レベル1：【1列化】分数と小数の加減計算・基本（無限ループバグを完全撲滅）
                     let pSign = Math.random() < 0.5 ? "＋" : "－";
                     let pOrder = Math.random() < 0.5 ? "F_D" : "D_F";
                     
-                    let den = 4;
-                    let num = 3;
+                    let num, den, dec;
                     
                     if (pSign === "＋") {
-                        den = Math.floor(Math.random() * 4) + 3; // 3〜6
-                        num = Math.floor(Math.random() * (den - 1)) + 1;
-                        while (getGCD(num, den) > 1) { den++; num = Math.floor(Math.random() * (den - 1)) + 1; }
+                        // 【安全制御】足し算用の既約分数と小数の安全なプール
+                        const safeAddPairs = [
+                            {n:1, d:3, dv:0.2, dn:1, dd:5}, {n:2, d:3, dv:0.5, dn:1, dd:2},
+                            {n:1, d:4, dv:0.4, dn:2, dd:5}, {n:3, d:4, dv:0.25, dn:1, dd:4},
+                            {n:1, d:5, dv:0.5, dn:1, dd:2}, {n:2, d:5, dv:0.25, dn:1, dd:4},
+                            {n:3, d:5, dv:0.6, dn:3, dd:5}, {n:4, d:5, dv:0.8, dn:4, dd:5},
+                            {n:1, d:6, dv:0.25, dn:1, dd:4}, {n:5, d:6, dv:0.4, dn:2, dd:5}
+                        ];
+                        let pair = safeAddPairs[Math.floor(Math.random() * safeAddPairs.length)];
+                        num = pair.n; den = pair.d; dec = {v: pair.dv, n: pair.dn, d: pair.dd};
                     } else {
-                        // 【安全逆算ロジック】引き算の無限ループを100%撲滅する配列制御
+                        // 【安全制御】引き算用の無限ループを100%防ぐプール
                         if (pOrder === "F_D") {
-                            // 分数 － 小数 のとき（必ず分数が大きくなるペアを安全に選択）
-                            const safePairs = [{n:3, d:4, dv:0.2, dn:1, dd:5}, {n:4, d:5, dv:0.5, dn:1, dd:2}, {n:2, d:3, dv:0.25, dn:1, dd:4}, {n:5, d:6, dv:0.4, dn:2, dd:5}];
-                            let pair = safePairs[Math.floor(Math.random() * safePairs.length)];
+                            // 分数 － 小数 のとき（必ず分数が大きくなるペア）
+                            const safeSubPairsFD = [
+                                {n:2, d:3, dv:0.25, dn:1, dd:4}, {n:3, d:4, dv:0.2, dn:1, dd:5}, 
+                                {n:3, d:4, dv:0.5, dn:1, dd:2}, {n:4, d:5, dv:0.5, dn:1, dd:2}, 
+                                {n:4, d:5, dv:0.25, dn:1, dd:4}, {n:5, d:6, dv:0.4, dn:2, dd:5}
+                            ];
+                            let pair = safeSubPairsFD[Math.floor(Math.random() * safeSubPairsFD.length)];
                             num = pair.n; den = pair.d; dec = {v: pair.dv, n: pair.dn, d: pair.dd};
                         } else {
-                            // 小数 － 分数 のとき（必ず小数が大きくなるペアを安全に選択）
-                            const safePairs = [{n:1, d:4, dv:0.5, dn:1, dd:2}, {n:1, d:3, dv:0.75, dn:3, dd:4}, {n:1, d:5, dv:0.4, dn:2, dd:5}, {n:2, d:5, dv:0.6, dn:3, dd:5}];
-                            let pair = safePairs[Math.floor(Math.random() * safePairs.length)];
+                            // 小数 － 分数 のとき（必ず小数が大きくなるペア）
+                            const safeSubPairsDF = [
+                                {n:1, d:4, dv:0.5, dn:1, dd:2}, {n:1, d:5, dv:0.4, dn:2, dd:5}, 
+                                {n:1, d:3, dv:0.75, dn:3, dd:4}, {n:2, d:5, dv:0.6, dn:3, dd:5},
+                                {n:1, d:2, dv:0.8, dn:4, dd:5}, {n:1, d:4, dv:0.6, dn:3, dd:5}
+                            ];
+                            let pair = safeSubPairsDF[Math.floor(Math.random() * safeSubPairsDF.length)];
                             num = pair.n; den = pair.d; dec = {v: pair.dv, n: pair.dn, d: pair.dd};
                         }
                     }
@@ -2286,7 +2297,7 @@
 
                 if (level === "4") {
                     // レベル4：【1列化】最高峰：計算の工夫・分配法則（同じ分数を完全排除、並び順・符号・計算記号のバリエーションを拡張）
-                    let den1 = Math.floor(Math.random() * 4) + 3; 
+                    let den1 = Math.floor(Math.random() * 7) + 3; 
                     let num1 = Math.floor(Math.random() * (den1 - 1)) + 1; 
                     while (getGCD(num1, den1) > 1 || num1 === 1) { num1 = Math.floor(Math.random() * (den1 - 1)) + 1; }
                     
