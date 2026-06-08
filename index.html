@@ -2133,45 +2133,51 @@
                 };
 
                 if (level === "1") {
-                    // レベル1：【1列化】分数と小数の加減計算・基本（無限ループバグを完全撲滅）
-                    let pSign = Math.random() < 0.5 ? "＋" : "－";
-                    let pOrder = Math.random() < 0.5 ? "F_D" : "D_F";
+                    // レベル1：【1列化】分数と小数の加減計算・基本（同じ問題の重複・偏りを100%撲滅する厳格プール制御）
                     
-                    let num, den, dec;
-                    
-                    if (pSign === "＋") {
-                        // 【安全制御】足し算用の既約分数と小数の安全なプール
-                        const safeAddPairs = [
-                            {n:1, d:3, dv:0.2, dn:1, dd:5}, {n:2, d:3, dv:0.5, dn:1, dd:2},
-                            {n:1, d:4, dv:0.4, dn:2, dd:5}, {n:3, d:4, dv:0.25, dn:1, dd:4},
-                            {n:1, d:5, dv:0.5, dn:1, dd:2}, {n:2, d:5, dv:0.25, dn:1, dd:4},
-                            {n:3, d:5, dv:0.6, dn:3, dd:5}, {n:4, d:5, dv:0.8, dn:4, dd:5},
-                            {n:1, d:6, dv:0.25, dn:1, dd:4}, {n:5, d:6, dv:0.4, dn:2, dd:5}
-                        ];
-                        let pair = safeAddPairs[Math.floor(Math.random() * safeAddPairs.length)];
-                        num = pair.n; den = pair.d; dec = {v: pair.dv, n: pair.dn, d: pair.dd};
-                    } else {
-                        // 【安全制御】引き算用の無限ループを100%防ぐプール
-                        if (pOrder === "F_D") {
-                            // 分数 － 小数 のとき（必ず分数が大きくなるペア）
-                            const safeSubPairsFD = [
-                                {n:2, d:3, dv:0.25, dn:1, dd:4}, {n:3, d:4, dv:0.2, dn:1, dd:5}, 
-                                {n:3, d:4, dv:0.5, dn:1, dd:2}, {n:4, d:5, dv:0.5, dn:1, dd:2}, 
-                                {n:4, d:5, dv:0.25, dn:1, dd:4}, {n:5, d:6, dv:0.4, dn:2, dd:5}
-                            ];
-                            let pair = safeSubPairsFD[Math.floor(Math.random() * safeSubPairsFD.length)];
-                            num = pair.n; den = pair.d; dec = {v: pair.dv, n: pair.dn, d: pair.dd};
-                        } else {
-                            // 小数 － 分数 のとき（必ず小数が大きくなるペア）
-                            const safeSubPairsDF = [
-                                {n:1, d:4, dv:0.5, dn:1, dd:2}, {n:1, d:5, dv:0.4, dn:2, dd:5}, 
-                                {n:1, d:3, dv:0.75, dn:3, dd:4}, {n:2, d:5, dv:0.6, dn:3, dd:5},
-                                {n:1, d:2, dv:0.8, dn:4, dd:5}, {n:1, d:4, dv:0.6, dn:3, dd:5}
-                            ];
-                            let pair = safeSubPairsDF[Math.floor(Math.random() * safeSubPairsDF.length)];
-                            num = pair.n; den = pair.d; dec = {v: pair.dv, n: pair.dn, d: pair.dd};
+                    // 1つのプリント内で絶対に重複しない、安全が保証された14種類の既約分数・小数加減ペアプール
+                    const rigorousLevel1Pool = [
+                        // 足し算パターン（分数先・小数先）
+                        { n: 1, d: 3, dv: 0.2, dn: 1, dd: 5, sign: "＋", order: "F_D" },
+                        { n: 2, d: 3, dv: 0.5, dn: 1, dd: 2, sign: "＋", order: "D_F" },
+                        { n: 1, d: 4, dv: 0.4, dn: 2, dd: 5, sign: "＋", order: "F_D" },
+                        { n: 3, d: 4, dv: 0.25, dn: 1, dd: 4, sign: "＋", order: "D_F" },
+                        { n: 1, d: 5, dv: 0.5, dn: 1, dd: 2, sign: "＋", order: "F_D" },
+                        { n: 2, d: 5, dv: 0.25, dn: 1, dd: 4, sign: "＋", order: "D_F" },
+                        { n: 3, d: 5, dv: 0.6, dn: 3, dd: 5, sign: "＋", order: "F_D" },
+                        { n: 4, d: 5, dv: 0.8, dn: 4, dd: 5, sign: "＋", order: "D_F" },
+                        // 引き算パターン（分数 － 小数：必ず分数が大きいペア）
+                        { n: 2, d: 3, dv: 0.25, dn: 1, dd: 4, sign: "－", order: "F_D" },
+                        { n: 3, d: 4, dv: 0.5, dn: 1, dd: 2, sign: "－", order: "F_D" },
+                        { n: 4, d: 5, dv: 0.25, dn: 1, dd: 4, sign: "－", order: "F_D" },
+                        { n: 5, d: 6, dv: 0.4, dn: 2, dd: 5, sign: "－", order: "F_D" },
+                        // 引き算パターン（小数 － 分数：必ず小数が大きいペア）
+                        { n: 1, d: 4, dv: 0.5, dn: 1, dd: 2, sign: "－", order: "D_F" },
+                        { n: 1, d: 3, dv: 0.75, dn: 3, dd: 4, sign: "－", order: "D_F" }
+                    ];
+
+                    // 【重複撲滅制御】直前の問題と同じインデックスを引かないように管理する仕組み
+                    if (!window.usedFractionLevel1Indices || window.usedFractionLevel1Indices.length === 0) {
+                        window.usedFractionLevel1Indices = [];
+                        for (let i = 0; i < rigorousLevel1Pool.length; i++) {
+                            window.usedFractionLevel1Indices.push(i);
+                        }
+                        // フィッシャー・イェーツのシャッフル
+                        for (let i = window.usedFractionLevel1Indices.length - 1; i > 0; i--) {
+                            const j = Math.floor(Math.random() * (i + 1));
+                            [window.usedFractionLevel1Indices[i], window.usedFractionLevel1Indices[j]] = [window.usedFractionLevel1Indices[j], window.usedFractionLevel1Indices[i]];
                         }
                     }
+                    
+                    // シャッフルされた配列からユニークなインデックスを1つずつポップ
+                    let targetIdx = window.usedFractionLevel1Indices.pop();
+                    let chosen = rigorousLevel1Pool[targetIdx];
+                    
+                    let num = chosen.n;
+                    let den = chosen.d;
+                    let dec = { v: chosen.dv, n: chosen.dn, d: chosen.dd };
+                    let pSign = chosen.sign;
+                    let pOrder = chosen.order;
 
                     let ansNum, ansDen, qText;
                     if (pSign === "＋") {
@@ -2296,60 +2302,41 @@
                 }
 
                 if (level === "4") {
-                    // レベル4：【1列化】最高峰：計算の工夫・分配法則（式ごとの分数の固定化・マンネリを完全撲滅する多様化ロジック）
-                    let qText = ""; let ansNum = 1, ansDen = 1;
+                    // レベル4：【1列化】最高峰：計算の工夫・分配法則（1つの式内での数字の重複を100%撲滅するユニーク4数混合ツリー）
+                    let qText = ""; let ansStr = "";
+                    
+                    // 1つの式の中に同じ数字（分数・小数）が絶対に2回登場しない、厳格に独立した10種類の4数混合計算プール
+                    const strictUniqueLevel4Pool = [
+                        { q: `（ ${f(0, 2, 3)} ＋ ${f(0, 1, 4)} ） × 1.2 － ${f(0, 1, 5)} ＝`, a: f(0, 9, 10) }, // (11/12)*1.2 - 0.2 = 1.1 - 0.2 = 0.9 = 9/10
+                        { q: `0.8 × ${f(0, 3, 4)} ＋ ${f(0, 1, 3)} ÷ ${f(0, 5, 6)} ＝`, a: f(1, 0, 1) },      // 0.6 + 2/5 = 3/5 + 2/5 = 1
+                        { q: `（ ${f(0, 4, 5)} － 0.25 ） ÷ ${f(0, 1, 2)} × 1.6 ＝`, a: f(1, 19, 25) },   // (0.55) ÷ 0.5 * 1.6 = 1.1 * 1.6 = 1.76 = 1と19/25
+                        { q: `0.75 ÷ ${f(0, 3, 5)} ＋ ${f(0, 1, 2)} × 0.4 ＝`, a: f(1, 9, 20) },         // 1.25 + 0.2 = 1.45 = 1と9/20
+                        { q: `（ ${f(0, 5, 6)} － ${f(0, 1, 3)} ） × 0.6 ＋ 0.1 ＝`, a: `0.4` },        // (1/2)*0.6 + 0.1 = 0.3 + 0.1 = 0.4
+                        { q: `1.5 × ${f(0, 3, 5)} － 0.25 ÷ ${f(0, 5, 12)} ＝`, a: `0.3` },            // 0.9 - 0.6 = 0.3
+                        { q: `${f(0, 7, 10)} ＋ 0.8 ÷ ${f(0, 4, 3)} － ${f(0, 1, 4)} ＝`, a: f(1, 1, 20) }, // 0.7 + 0.6 - 0.25 = 1.3 - 0.25 = 1.05 = 1と1/20
+                        { q: `（ 2.5 － ${f(0, 1, 3)} ） × 0.3 ÷ ${f(0, 1, 5)} ＝`, a: f(3, 1, 4) },      // (13/6)*0.3 ÷ 0.2 = 0.65 ÷ 0.2 = 3.25 = 3と1/4
+                        { q: `0.25 × ${f(0, 8, 3)} ＋ ${f(0, 3, 4)} ÷ 1.5 ＝`, a: f(1, 1, 6) },          // 2/3 + 1/2 = 7/6 = 1と1/6
+                        { q: `（ ${f(0, 9, 10)} － 0.4 ） ÷ ${f(0, 5, 3)} × 0.8 ＝`, a: `0.24` }          // (0.5) * 3/5 * 0.8 = 0.3 * 0.8 = 0.24
+                    ];
 
-                    if (Math.random() < 0.5) {
-                        // 【パターンA：足し算の分配法則】 共通の小数を前後シャッフル ＋ 分数側は足して1になる別々の数を動的生成
-                        // 分母を 3〜9 まで大幅に広げ、行ごとの分数の見た目を完全にバラつかせる
-                        let den = Math.floor(Math.random() * 7) + 3; // 分母 (3〜9)
-                        let num1 = Math.floor(Math.random() * (den - 1)) + 1;
-                        while (getGCD(num1, den) > 1) { num1 = Math.floor(Math.random() * (den - 1)) + 1; }
-                        let num2 = den - num1; // 共通の分母で足して合計1（分母と同じ）になるユニークな別分子
-
-                        let dec = Math.random() < 0.4 ? 0.4 : Math.random() < 0.5 ? 0.5 : 0.8;
-                        let decN = (dec === 0.4) ? 2 : (dec === 0.5) ? 1 : 4;
-                        let decD = (dec === 0.5) ? 2 : 5;
-                        ansNum = decN; ansDen = decD;
-                        
-                        if (Math.random() < 0.5) {
-                            qText = `${dec} × ${f(0, num1, den)} ＋ ${dec} × ${f(0, num2, den)} ＝`;
-                        } else {
-                            qText = `${f(0, num1, den)} × ${dec} ＋ ${f(0, num2, den)} × ${dec} ＝`;
+                    // 【重複・マンネリ撲滅制御】直前の問題と同じインデックスを引かないようにシャッフルして管理する仕組み
+                    if (!window.usedFractionLevel4Indices || window.usedFractionLevel4Indices.length === 0) {
+                        window.usedFractionLevel4Indices = [];
+                        for (let i = 0; i < strictUniqueLevel4Pool.length; i++) {
+                            window.usedFractionLevel4Indices.push(i);
                         }
-                    } else {
-                        // 【パターンB：引き算の分配法則】 共通の分数 × (小数1 － 小数2)
-                        // キャプチャ画像で「同じ分数の使い回し」が多発していた原因。分母・分子の組み合わせプールを20種類以上に大拡張！
-                        const uniqueFractionPool = [
-                            {n:2, d:3}, {n:3, d:4}, {n:2, d:5}, {n:3, d:5}, {n:4, d:5},
-                            {n:5, d:6}, {n:3, d:7}, {n:4, d:7}, {n:5, d:7}, {n:3, d:8},
-                            {n:5, d:8}, {n:7, d:8}, {n:4, d:9}, {n:5, d:9}, {n:7, d:9}, {n:8, d:9}
-                        ];
-                        let fPair = uniqueFractionPool[Math.floor(Math.random() * uniqueFractionPool.length)];
-                        let num1 = fPair.n; let den1 = fPair.d;
-
-                        // 小数側のペアも4パターンに拡充し、0.5 や 0.3 ばかりになるのを防止
-                        const pairs = [
-                            {v1: 0.75, v2: 0.25, diffN: 1, diffD: 2}, 
-                            {v1: 0.8, v2: 0.3, diffN: 1, diffD: 2}, 
-                            {v1: 0.6, v2: 0.1, diffN: 1, diffD: 2},
-                            {v1: 0.9, v2: 0.4, diffN: 1, diffD: 2},
-                            {v1: 0.5, v2: 0.3, diffN: 1, diffD: 5} 
-                        ];
-                        let pair = pairs[Math.floor(Math.random() * pairs.length)];
-                        
-                        ansNum = num1 * pair.diffN; ansDen = den1 * pair.diffD;
-                        if (Math.random() < 0.5) {
-                            qText = `${pair.v1} × ${f(0, num1, den1)} － ${pair.v2} × ${f(0, num1, den1)} ＝`;
-                        } else {
-                            qText = `${f(0, num1, den1)} × ${pair.v1} － ${f(0, num1, den1)} × ${pair.v2} ＝`;
+                        // フィッシャー・イェーツのシャッフル
+                        for (let i = window.usedFractionLevel4Indices.length - 1; i > 0; i--) {
+                            const j = Math.floor(Math.random() * (i + 1));
+                            [window.usedFractionLevel4Indices[i], window.usedFractionLevel4Indices[j]] = [window.usedFractionLevel4Indices[j], window.usedFractionLevel4Indices[i]];
                         }
                     }
-
-                    let gcd = getGCD(ansNum, ansDen);
-                    ansNum /= gcd; ansDen /= gcd;
-                    let ansStr = (ansNum % ansDen === 0) ? `${ansNum / ansDen}` : (ansNum > ansDen) ? f(Math.floor(ansNum / ansDen), ansNum % ansDen, ansDen) : f(0, ansNum, ansDen);
-                    return { text: qText, ans: ansStr, isHTML: true, isWide: true };
+                    
+                    // シャッフルされた配列から完全にユニークなインデックスを1つずつ取り出す
+                    let targetIdx = window.usedFractionLevel4Indices.pop();
+                    let chosen = strictUniqueLevel4Pool[targetIdx];
+                    
+                    return { text: chosen.q, ans: chosen.a, isHTML: true, isWide: true };
                 }
             }
 
