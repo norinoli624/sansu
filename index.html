@@ -212,7 +212,7 @@
                             1: "レベル1（基礎：一般的なくり下がり）",
                             2: "レベル2（応用：11－2等の特殊パターン）",
                             3: "レベル3（発展：□を求める虫食いひき算）",
-                            4: "レベル4（最高峰：100台からの減算筆算）"
+                            4: "レベル4（最高峰：3つの数の減算）"
                         };
                     } else if (unit.includes("3つの数の計算")) {
                         labels = {
@@ -223,7 +223,7 @@
                         };
                     }else if (unit.includes("100へのアプローチ・何十の計算")) {
                         labels = {
-                            1: "レベル1（基礎：100への単一加減算）",
+                            1: "レベル1（基礎：100までの単一加減算）",
                             2: "レベル2（応用：何十同士の100の補数）",
                             3: "レベル3（発展：2桁と2桁の100への補数）",
                             4: "レベル4（最高峰：3つの数を含む100への計算）"
@@ -495,7 +495,12 @@
             }
         }
 
-
+        // 【追加】くり上がりたし算のレベル1・2用：直近2件の問題テキストを記憶する配列
+        let additionHistory = [];
+        // 【追加】1桁のたし算・ひき算のレベル3用：直近2件の問題テキストを記憶する配列
+        let singleDigitHistory = [];
+        // 【追加】くり下がりひき算のレベル1・2用：直近2件の問題テキストを記憶する配列
+        let subtractionHistory = [];
 
         function createSingleQuestion(grade, unit, level) {
             // ==========================================
@@ -524,143 +529,525 @@
                         return { text: `${a} － ${b} ＝`, ans: a - b };
                     }
                 }
-
+                // 【修正】レベル2：0の配置をランダム化 ＆ 答えが0になるパターンを網羅
                 if (level === "2") { 
-                    let a = Math.floor(Math.random() * 9) + 1;
-                    if (isPlus) return { text: `${a} ＋ 0 ＝`, ans: a };
-                    else return { text: `${a} － 0 ＝`, ans: a };
+                    const pattern = Math.floor(Math.random() * 5); // 0〜4のパターン
+                    let a = Math.floor(Math.random() * 9) + 1; // 1〜9
+                    
+                    if (pattern === 0) {
+                        // 答えが0になるパターン (a - a)
+                        return { text: `${a} － ${a} ＝`, ans: 0 };
+                    } else if (pattern === 1) {
+                        // 答えが0になるパターン (0 + 0 または 0 - 0)
+                        if (Math.random() > 0.5) return { text: `0 ＋ 0 ＝`, ans: 0 };
+                        else return { text: `0 － 0 ＝`, ans: 0 };
+                    } else if (pattern === 2) {
+                        // 0が後ろにくるパターン (a + 0 または a - 0)
+                        if (Math.random() > 0.5) return { text: `${a} ＋ 0 ＝`, ans: a };
+                        else return { text: `${a} － 0 ＝`, ans: a };
+                    } else {
+                        // 0が前にくるパターン (0 + a) ※1年生なので 0 - a などの負の数は除外
+                        return { text: `0 ＋ ${a} ＝`, ans: a };
+                    }
                 }
-
                 if (level === "3") { 
-                    // 【改良】10の補数パターン（繰り上がり・下がりのさくらんぼ計算の基礎）の出現確率を80%に強化
-                    if (Math.random() < 0.8) {
-                        let a = Math.floor(Math.random() * 9) + 1; // 1〜9
-                        let b = 10 - a;
-                        if (Math.random() < 0.5) { // たし算ベース (□+b=10 または a+□=10)
-                            if (Math.random() < 0.5) {
-                                return { text: `□ ＋ ${b} ＝ 10`, ans: a };
-                            } else {
-                                return { text: `${a} ＋ □ ＝ 10`, ans: b };
+                    // 【改良】問題の重複・偏りを徹底的に防止するロジックへ刷新
+                    let chosen;
+                    let isDuplicate = true;
+                    let maxAttempts = 50;
+                    let attempts = 0;
+
+                    while (isDuplicate && attempts < maxAttempts) {
+                        attempts++;
+
+                        if (Math.random() < 0.8) {
+                            // 10の補数パターン（計8パターンを均等に出題）
+                            const complements = [];
+                            for (let i = 1; i <= 9; i++) {
+                                const j = 10 - i;
+                                complements.push({ type: "add_box_left",  text: `□ ＋ ${j} ＝ 10`, ans: i });
+                                complements.push({ type: "add_box_right", text: `${i} ＋ □ ＝ 10`, ans: j });
+                                complements.push({ type: "sub_box_mid",   text: `10 － □ ＝ ${j}`, ans: i });
+                                complements.push({ type: "sub_box_left",  text: `□ － ${i} ＝ ${j}`, ans: 10 });
                             }
-                        } else { // ひき算ベース (10-□=b または □-a=b)
-                            if (Math.random() < 0.5) {
-                                return { text: `10 － □ ＝ ${b}`, ans: a };
-                            } else {
-                                return { text: `□ － ${a} ＝ ${b}`, ans: 10 };
+                            chosen = complements[Math.floor(Math.random() * complements.length)];
+                        } else {
+                            // 通常の虫食い算パターン（答えが2〜9に収まる範囲で全パターンを網羅）
+                            const normalQuestions = [];
+                            for (let a = 1; a <= 8; a++) {
+                                for (let hidden = 1; hidden <= 8; hidden++) {
+                                    if (a + hidden <= 9) {
+                                        normalQuestions.push({ text: `${a} ＋ □ ＝ ${a + hidden}`, ans: hidden });
+                                        normalQuestions.push({ text: `${a + hidden} － □ ＝ ${a}`, ans: hidden });
+                                    }
+                                }
                             }
+                            chosen = normalQuestions[Math.floor(Math.random() * normalQuestions.length)];
+                        }
+
+                        // 【追加】直近2件の履歴と重複していないかチェック
+                        if (!singleDigitHistory.includes(chosen.text)) {
+                            isDuplicate = false;
+                        }
+                    }
+
+                    // 履歴をアップデート（最大2件を維持）
+                    singleDigitHistory.push(chosen.text);
+                    if (singleDigitHistory.length > 2) {
+                        singleDigitHistory.shift();
+                    }
+
+                    return { text: chosen.text, ans: chosen.ans };
+                }
+                // 【修正】レベル4：数字の数を4つから3つへ変更（加減混合）
+                if (level === "4") {
+                    let a, b, c, text, ans;
+                    if (Math.random() > 0.5) {
+                        // a ＋ b － c パターン（答えが1〜9、計算途中でマイナスにならない制御）
+                        a = Math.floor(Math.random() * 5) + 2; // 2〜6
+                        b = Math.floor(Math.random() * 4) + 2; // 2〜5
+                        c = Math.floor(Math.random() * (a + b - 1)) + 1; // 1〜(a+b-1)
+                        while (a + b - c > 9 || a + b - c < 1) {
+                            a = Math.floor(Math.random() * 5) + 2;
+                            b = Math.floor(Math.random() * 4) + 2;
+                            c = Math.floor(Math.random() * (a + b - 1)) + 1;
+                        }
+                        text = `${a} ＋ ${b} － ${c} ＝`;
+                        ans = a + b - c;
+                    } else {
+                        // a － b ＋ c パターン（答えが1〜9、計算途中でマイナスにならない制御）
+                        a = Math.floor(Math.random() * 5) + 5; // 5〜9
+                        b = Math.floor(Math.random() * (a - 1)) + 1; // 1〜(a-1)
+                        c = Math.floor(Math.random() * 5) + 1; // 1〜5
+                        while (a - b + c > 9 || a - b + c < 1) {
+                            a = Math.floor(Math.random() * 5) + 5;
+                            b = Math.floor(Math.random() * (a - 1)) + 1;
+                            c = Math.floor(Math.random() * 5) + 1;
+                        }
+                        text = `${a} － ${b} ＋ ${c} ＝`;
+                        ans = a - b + c;
+                    }
+                    return { text: text, ans: ans };
+                }
+            }
+
+
+            // ==========================================
+            // ◆ くり上がりのあるたし算
+            // ==========================================
+            if (unit === "くり上がりのあるたし算") {
+                let text, ans;
+                let isDuplicate = true;
+                let maxAttempts = 50;
+                let attempts = 0;
+
+                while (isDuplicate && attempts < maxAttempts) {
+                    attempts++;
+                    
+                    let a = Math.floor(Math.random() * 4) + 6; // 6〜9
+                    let b = Math.floor(Math.random() * 5) + 4; // 4〜8
+                    while (a + b <= 10 || a === b) { 
+                        a = Math.floor(Math.random() * 4) + 6;
+                        b = Math.floor(Math.random() * 5) + 4; 
+                    }
+                    const big = Math.max(a, b);
+                    const small = Math.min(a, b);
+
+                    // レベル1：大きい数字 ＋ 小さい数字
+                    if (level === "1") {
+                        text = `${big} ＋ ${small} ＝`;
+                        ans = big + small;
+                    }
+                    // レベル2：小さい数字 ＋ 大きい数字
+                    else if (level === "2") {
+                        text = `${small} ＋ ${big} ＝`;
+                        ans = small + big; 
+                    }
+                    // レベル3：□の位置をランダムに配置
+                    else if (level === "3") {
+                        if (Math.random() > 0.5) {
+                            return { text: `□ ＋ ${small} ＝ ${big + small}`, ans: big };
+                        } else {
+                            return { text: `${big} ＋ □ ＝ ${big + small}`, ans: small };
+                        }
+                    }
+                    // レベル4：1桁の3数加算（くり下がりを排除）
+                    else if (level === "4") {
+                        let n1 = Math.floor(Math.random() * 4) + 6;
+                        let n2 = Math.floor(Math.random() * 5) + 4;
+                        while (n1 + n2 <= 10) {
+                            n2 = Math.floor(Math.random() * 5) + 4;
+                        }
+                        let n3 = Math.floor(Math.random() * 7) + 2;
+                        while (n1 + n2 + n3 > 20) {
+                            n3 = Math.floor(Math.random() * 7) + 2;
+                        }
+                        return { text: `${n1} ＋ ${n2} ＋ ${n3} ＝`, ans: n1 + n2 + n3 };
+                    }
+
+                    // レベル1・2の場合のみ履歴チェックを実行
+                    if (level === "1" || level === "2") {
+                        if (!additionHistory.includes(text)) {
+                            isDuplicate = false;
                         }
                     } else {
-                        // 残り20%は従来の通常虫食い算を出題
-                        let a = Math.floor(Math.random() * 5) + 1; let hidden = Math.floor(Math.random() * 4) + 1;
-                        if (isPlus) return { text: `${a} ＋ □ ＝ ${a + hidden}`, ans: hidden };
-                        else return { text: `${a + hidden} － □ ＝ ${a}`, ans: hidden };
+                        isDuplicate = false;
                     }
                 }
 
-                if (level === "4") {
-                    let a = Math.floor(Math.random() * 4) + 6; let b = Math.floor(Math.random() * 3) + 1; let c = Math.floor(Math.random() * 2) + 1; let d = Math.floor(Math.random() * 4) + 1; 
-                    return { text: `${a} － ${b} － ${c} ＋ ${d} ＝`, ans: a - b - c + d };
+                if (level === "1" || level === "2") {
+                    additionHistory.push(text);
+                    if (additionHistory.length > 2) {
+                        additionHistory.shift();
+                    }
                 }
+
+                return { text: text, ans: ans };
             }
 
-            if (unit === "くり上がりのあるたし算") {
-                let a = Math.floor(Math.random() * 4) + 6; let b = Math.floor(Math.random() * 5) + 4; 
-                while (a + b <= 10) { b = Math.floor(Math.random() * 5) + 4; }
 
-                if (level === "1") return { text: `${a} ＋ ${b} ＝`, ans: a + b };
-                if (level === "2") return { text: `${b} ＋ ${a} ＝`, ans: b + a }; 
-                if (level === "3") return { text: `${a} ＋ □ ＝ ${a + b}`, ans: b }; 
-                if (level === "4") {
-                    let n1 = Math.floor(Math.random() * 5) + 11; let n2 = Math.floor(Math.random() * 4) + 6; let n3 = Math.floor(Math.random() * 5) + 4;  
-                    return { text: `${n1} ＋ ${n2} － ${n3} ＝`, ans: n1 + n2 - n3 };
-                }
-            }
-
+            // ==========================================
+            // ◆ くり下がりのあるひき算
+            // ==========================================
             if (unit === "くり下がりのあるひき算") {
-                let ans = Math.floor(Math.random() * 8) + 2; let b = Math.floor(Math.random() * 8) + 2; let a = ans + b;                             
-                while (a <= 10 || a >= 20) { ans = Math.floor(Math.random() * 8) + 2; b = Math.floor(Math.random() * 8) + 2; a = ans + b; }
+                let text, ans;
+                let isDuplicate = true;
+                let maxAttempts = 50;
+                let attempts = 0;
 
-                if (level === "1") return { text: `${a} － ${b} ＝`, ans: ans };
-                if (level === "2") {
-                    if (Math.random() > 0.5) return { text: `11 － 2 ＝`, ans: 9 }; 
-                    else return { text: `${a} － ${ans} ＝`, ans: b };
-                }
-                if (level === "3") return { text: `${a} － □ ＝ ${ans}`, ans: b };
-                if (level === "4") {
-                    let bigA = a + Math.floor(Math.random() * 2) * 10 + 10; 
-                    return { text: `${bigA} － ${b} ＝`, ans: bigA - b };
-                }
-            }
+                while (isDuplicate && attempts < maxAttempts) {
+                    attempts++;
 
-            if (unit === "3つの数の計算") {
-                if (level === "1") {
-                    if (Math.random() > 0.5) {
-                        let n1 = Math.floor(Math.random()*3)+1; let n2 = Math.floor(Math.random()*3)+1; let n3 = Math.floor(Math.random()*3)+1;
-                        return { text: `${n1} ＋ ${n2} ＋ ${n3} ＝`, ans: n1 + n2 + n3 };
+                    // レベル1：一般的なくり下がり（1の位 < 引く数）
+                    if (level === "1") {
+                        let base = Math.floor(Math.random() * 8) + 11; // 11〜18
+                        let ones = base % 10; // 1の位の数字
+                        let sub = Math.floor(Math.random() * (9 - (ones + 1) + 1)) + (ones + 1); // ones+1 〜 9
+                        
+                        while (sub === ones + 1 || base - sub >= 10) {
+                            base = Math.floor(Math.random() * 8) + 11;
+                            ones = base % 10;
+                            sub = Math.floor(Math.random() * (9 - (ones + 1) + 1)) + (ones + 1);
+                        }
+                        text = `${base} － ${sub} ＝`;
+                        ans = base - sub;
+                    }
+                    // レベル2：特殊パターン（答えが2〜9に美しくばらけるように修正）
+                    else if (level === "2") {
+                        const specialPatterns = [];
+                        for (let base = 11; base <= 18; base++) {
+                            let ones = base % 10;
+                            let sub = ones + 1;
+                            
+                            specialPatterns.push({ text: `${base} － ${sub} ＝`, ans: base - sub });
+                            
+                            let reverseSub = base - sub;
+                            if (reverseSub !== sub) {
+                                specialPatterns.push({ text: `${base} － ${reverseSub} ＝`, ans: base - reverseSub });
+                            }
+                        }
+                        let chosen = specialPatterns[Math.floor(Math.random() * specialPatterns.length)];
+                        text = chosen.text;
+                        ans = chosen.ans;
+                    }
+                    // レベル3：□の位置をランダム配置
+                    else if (level === "3") {
+                        let base = Math.floor(Math.random() * 8) + 11; // 11〜18
+                        let ones = base % 10;
+                        let sub = Math.floor(Math.random() * (9 - (ones + 1) + 1)) + (ones + 1);
+                        while (base - sub >= 10) {
+                            base = Math.floor(Math.random() * 8) + 11;
+                            ones = base % 10;
+                            sub = Math.floor(Math.random() * (9 - (ones + 1) + 1)) + (ones + 1);
+                        }
+                        
+                        if (Math.random() > 0.5) {
+                            text = `□ － ${sub} ＝ ${base - sub}`;
+                            ans = base;
+                        } else {
+                            text = `${base} － □ ＝ ${base - sub}`;
+                            ans = sub;
+                        }
+                    }
+                    // 【修正】レベル4：3つの数の減算のみ（最初のひき算で確実にくり下がり、答えは1〜9）
+                    else if (level === "4") {
+                        // 1つ目のひき算（必ずくり下がりを発生させる：11〜18から引く）
+                        let n1 = Math.floor(Math.random() * 8) + 11; // 11〜18
+                        let ones = n1 % 10;
+                        let n2 = Math.floor(Math.random() * (9 - (ones + 1) + 1)) + (ones + 1); // ones+1 〜 9
+                        while (n1 - n2 >= 10) {
+                            n1 = Math.floor(Math.random() * 8) + 11;
+                            ones = n1 % 10;
+                            n2 = Math.floor(Math.random() * (9 - (ones + 1) + 1)) + (ones + 1);
+                        }
+                        
+                        let midResult = n1 - n2; // 1つ目の計算結果 (必ず2〜9のいずれかになる)
+                        
+                        // 2つ目のひき算（答えがマイナスや0にならないよう、1 〜 midResult-1 の範囲で抽選）
+                        let n3 = Math.floor(Math.random() * (midResult - 1)) + 1;
+                        
+                        text = `${n1} － ${n2} － ${n3} ＝`;
+                        ans = midResult - n3;
+                    }
+
+                    // レベル1・2・3・4すべてで履歴チェックを実行
+                    if (level === "1" || level === "2" || level === "3" || level === "4") {
+                        if (!subtractionHistory.includes(text)) {
+                            isDuplicate = false;
+                        }
                     } else {
-                        let n2 = Math.floor(Math.random()*2)+1; let n3 = Math.floor(Math.random()*2)+2;
-                        return { text: `9 － ${n2} － ${n3} ＝`, ans: 9 - n2 - n3 };
+                        isDuplicate = false;
                     }
                 }
-                if (level === "2") {
-                    let a = Math.floor(Math.random()*5)+4; let b = Math.floor(Math.random()*3)+1; let c = Math.floor(Math.random()*3)+1; 
-                    if (Math.random() > 0.5) return { text: `${a} ＋ ${b} － ${c} ＝`, ans: a + b - c };
-                    else return { text: `${a} － ${b} ＋ ${c} ＝`, ans: a - b + c };
+
+                // 履歴の更新
+                if (level === "1" || level === "2" || level === "3" || level === "4") {
+                    subtractionHistory.push(text);
+                    if (subtractionHistory.length > 2) {
+                        subtractionHistory.shift();
+                    }
                 }
-                if (level === "3") {
-                    let n1 = Math.floor(Math.random()*4)+2; let n2 = Math.floor(Math.random()*3)+1;
-                    return { text: `${n1} ＋ □ － ${n2} ＝ ${n1 + 2}`, ans: n2 + 2 };
-                }
-                if (level === "4") {
-                    let n1 = Math.floor(Math.random() * 5) + 11; let n2 = Math.floor(Math.random() * 4) + 5; let n3 = Math.floor(Math.random() * 5) + 5; let n4 = Math.floor(Math.random() * 4) + 2; 
-                    return { text: `${n1} － ${n2} ＋ ${n3} － ${n4} ＝`, ans: n1 - n2 + n3 - n4 };
-                }
+
+                return { text: text, ans: ans };
             }
 
-            // 【新設単元】100へのアプローチ・何十の計算
+
+
+            // 【追加】3つの数の計算用：直近2件の問題テキストを記憶する配列
+            let threeNumbersHistory = [];
+
+            // ==========================================
+            // ◆ 3つの数の計算
+            // ==========================================
+            if (unit === "3つの数の計算") {
+                let text, ans;
+                let isDuplicate = true;
+                let maxAttempts = 50;
+                let attempts = 0;
+
+                while (isDuplicate && attempts < maxAttempts) {
+                    attempts++;
+
+                    if (level === "1") {
+                        if (Math.random() > 0.5) {
+                            let n1 = Math.floor(Math.random() * 8) + 1;
+                            let n2 = Math.floor(Math.random() * 8) + 1;
+                            let maxN3 = Math.min(8, 15 - (n1 + n2));
+                            if (maxN3 < 1) maxN3 = 1;
+                            let n3 = Math.floor(Math.random() * maxN3) + 1;
+                            text = `${n1} ＋ ${n2} ＋ ${n3} ＝`;
+                            ans = n1 + n2 + n3;
+                        } else {
+                            let n1 = Math.floor(Math.random() * 8) + 8;
+                            let n2 = Math.floor(Math.random() * 4) + 1;
+                            let n3 = Math.floor(Math.random() * 4) + 1;
+                            while (n1 - n2 - n3 < 1) {
+                                n1 = Math.floor(Math.random() * 8) + 8;
+                                n2 = Math.floor(Math.random() * 4) + 1;
+                                n3 = Math.floor(Math.random() * 4) + 1;
+                            }
+                            text = `${n1} － ${n2} － ${n3} ＝`;
+                            ans = n1 - n2 - n3;
+                        }
+                    }
+                    else if (level === "2") {
+                        let n1, n2, n3, op1, op2, r1, r2;
+                        
+                        while (true) {
+                            n1 = Math.floor(Math.random() * 7) + 3; // 3〜9
+                            n2 = Math.floor(Math.random() * 5) + 1; // 1〜5
+                            n3 = Math.floor(Math.random() * 5) + 1; // 1〜5
+                            
+                            // 「＋と－」または「－と＋」の混合パターンのみに限定（同符号を排除）
+                            if (Math.random() > 0.5) {
+                                op1 = "＋";
+                                op2 = "－";
+                            } else {
+                                op1 = "－";
+                                op2 = "＋";
+                            }
+                            
+                            // 1つ目の計算：範囲外（1〜9）ならやり直し
+                            r1 = op1 === "＋" ? n1 + n2 : n1 - n2;
+                            if (r1 < 1 || r1 > 9) continue;
+                            
+                            // 2つ目の計算：範囲外（1〜9）ならやり直し
+                            r2 = op2 === "＋" ? r1 + n3 : r1 - n3;
+                            if (r2 < 1 || r2 > 9) continue;
+                            
+                            ans = r2;
+                            text = `${n1} ${op1} ${n2} ${op2} ${n3} ＝`;
+                            break;
+                        }
+                    }
+                    else if (level === "3") {
+                        let n1 = Math.floor(Math.random() * 7) + 2;
+                        let n2 = Math.floor(Math.random() * 5) + 2;
+                        let n3 = Math.floor(Math.random() * 5) + 1;
+                        let op1 = Math.random() > 0.5 ? "＋" : "－";
+                        let op2 = Math.random() > 0.5 ? "＋" : "－";
+                        let currentAns;
+                        
+                        while (true) {
+                            let r1 = op1 === "＋" ? n1 + n2 : n1 - n2;
+                            if (r1 >= 1 && r1 <= 15) {
+                                let r2 = op2 === "＋" ? r1 + n3 : r1 - n3;
+                                if (r2 >= 1 && r2 <= 9) {
+                                    currentAns = r2;
+                                    break;
+                                }
+                            }
+                            n1 = Math.floor(Math.random() * 7) + 2;
+                            n2 = Math.floor(Math.random() * 5) + 2;
+                            n3 = Math.floor(Math.random() * 5) + 1;
+                            op1 = Math.random() > 0.5 ? "＋" : "－";
+                            op2 = Math.random() > 0.5 ? "＋" : "－";
+                        }
+                        
+                        let pos = Math.floor(Math.random() * 3);
+                        if (pos === 0) { text = `□ ${op1} ${n2} ${op2} ${n3} ＝ ${currentAns}`; ans = n1; }
+                        else if (pos === 1) { text = `${n1} ${op1} □ ${op2} ${n3} ＝ ${currentAns}`; ans = n2; }
+                        else { text = `${n1} ${op1} ${n2} ${op2} □ ＝ ${currentAns}`; ans = n3; }
+                    }
+                    else if (level === "4") {
+                        let n1, n2, n3, n4, op1, op2, op3, r1, r2, r3;
+                        while (true) {
+                            n1 = Math.floor(Math.random() * 8) + 4;
+                            n2 = Math.floor(Math.random() * 5) + 1;
+                            n3 = Math.floor(Math.random() * 5) + 1;
+                            n4 = Math.floor(Math.random() * 5) + 1;
+                            op1 = Math.random() > 0.5 ? "＋" : "－";
+                            op2 = Math.random() > 0.5 ? "＋" : "－";
+                            op3 = Math.random() > 0.5 ? "＋" : "－";
+                            
+                            r1 = op1 === "＋" ? n1 + n2 : n1 - n2;
+                            if (r1 < 1 || r1 > 15) continue;
+                            r2 = op2 === "＋" ? r1 + n3 : r1 - n3;
+                            if (r2 < 1 || r2 > 15) continue;
+                            r3 = op3 === "＋" ? r2 + n4 : r2 - n4;
+                            if (r3 < 1 || r3 > 19) continue;
+                            
+                            ans = r3;
+                            text = `${n1} ${op1} ${n2} ${op2} ${n3} ${op3} ${n4} ＝`;
+                            break;
+                        }
+                    }
+
+                    if (!threeNumbersHistory.includes(text)) isDuplicate = false;
+                }
+
+                threeNumbersHistory.push(text);
+                if (threeNumbersHistory.length > 2) threeNumbersHistory.shift();
+
+                return { text: text, ans: ans };
+            }
+
+
+            // 【追加】100へのアプローチ用：直近2件の問題テキストを記憶する配列
+            let approach100History = [];
+
+            // ==========================================
+            // ◆ 100へのアプローチ・何十の計算
+            // ==========================================
             if (unit === "100へのアプローチ・何十の計算") {
-                if (level === "1") {
-                    if (Math.random() < 0.5) { // 100 － 一桁
-                        let minus = Math.floor(Math.random() * 9) + 1; // 1〜9
-                        return { text: `100 － ${minus} ＝`, ans: 100 - minus };
-                    } else { // 何十 ＋ 一桁
-                        let plusX = (Math.floor(Math.random() * 9) + 1) * 10; // 10〜90
-                        let plusY = Math.floor(Math.random() * 9) + 1; // 1〜9
-                        return { text: `${plusX} ＋ ${plusY} ＝`, ans: plusX + plusY };
+                let text, ans;
+                let isDuplicate = true;
+                let maxAttempts = 50;
+                let attempts = 0;
+                const isPlus = Math.random() > 0.5;
+
+                while (isDuplicate && attempts < maxAttempts) {
+                    attempts++;
+
+                    // レベル1：何十同士の単純な加減算
+                    if (level === "1") {
+                        let n1 = (Math.floor(Math.random() * 9) + 1) * 10; // 10〜90
+                        let n2 = (Math.floor(Math.random() * 9) + 1) * 10; // 10〜90
+                        if (isPlus) {
+                            while (n1 + n2 > 100) {
+                                n1 = (Math.floor(Math.random() * 9) + 1) * 10;
+                                n2 = (Math.floor(Math.random() * 9) + 1) * 10;
+                            }
+                            text = `${n1} ＋ ${n2} ＝`;
+                            ans = n1 + n2;
+                        } else {
+                            while (n1 - n2 < 10) {
+                                n1 = (Math.floor(Math.random() * 9) + 1) * 10;
+                                n2 = (Math.floor(Math.random() * 9) + 1) * 10;
+                            }
+                            text = `${n1} － ${n2} ＝`;
+                            ans = n1 - n2;
+                        }
+                    }
+                    // 【修正】レベル2：何十同士の100の補数（合計が必ず100になる、□の位置ランダム）
+                    else if (level === "2") {
+                        let n = (Math.floor(Math.random() * 9) + 1) * 10; // 10〜90
+                        let comp = 100 - n; // 相方の何十の数
+                        
+                        if (Math.random() > 0.5) {
+                            text = `${n} ＋ □ ＝ 100`;
+                            ans = comp;
+                        } else {
+                            text = `□ ＋ ${n} ＝ 100`;
+                            ans = comp;
+                        }
+                    }
+                    // 【修正】レベル3：2桁と2桁の100への補数（1の位が0以外の2桁から100を作る、□の位置ランダム）
+                    else if (level === "3") {
+                        let n = Math.floor(Math.random() * 89) + 11; // 11〜99
+                        while (n % 10 === 0) { // 1の位が0（何十）のパターンはレベル2と被るので排除
+                            n = Math.floor(Math.random() * 89) + 11;
+                        }
+                        let comp = 100 - n; // 100への相方の2桁の数
+
+                        if (Math.random() > 0.5) {
+                            text = `${n} ＋ □ ＝ 100`;
+                            ans = comp;
+                        } else {
+                            text = `□ ＋ ${n} ＝ 100`;
+                            ans = comp;
+                        }
+                    }
+                    // レベル4：加減混合・3つの「何十」の数
+                    else if (level === "4") {
+                        let n1, n2, n3, op1, op2, r1, r2;
+                        
+                        while (true) {
+                            n1 = (Math.floor(Math.random() * 10) + 1) * 10;
+                            n2 = (Math.floor(Math.random() * 9) + 1) * 10;
+                            n3 = (Math.floor(Math.random() * 9) + 1) * 10;
+                            
+                            if (Math.random() > 0.5) {
+                                op1 = "＋";
+                                op2 = "－";
+                            } else {
+                                op1 = "－";
+                                op2 = "＋";
+                            }
+                            
+                            r1 = op1 === "＋" ? n1 + n2 : n1 - n2;
+                            if (r1 < 10 || r1 > 100) continue;
+                            
+                            r2 = op2 === "＋" ? r1 + n3 : r1 - n3;
+                            if (r2 < 10 || r2 > 100) continue;
+                            
+                            ans = r2;
+                            text = `${n1} ${op1} ${n2} ${op2} ${n3} ＝`;
+                            break;
+                        }
+                    }
+
+                    if (!approach100History.includes(text)) {
+                        isDuplicate = false;
                     }
                 }
-                if (level === "2") {
-                    if (Math.random() < 0.5) { // 何十 ＋ 何十 ＝ 100
-                        let plusX = (Math.floor(Math.random() * 8) + 1) * 10; // 10〜80
-                        let plusY = 100 - plusX;
-                        return { text: `${plusX} ＋ ${plusY} ＝`, ans: 100 };
-                    } else { // 100 － 何十
-                        let minusX = (Math.floor(Math.random() * 9) + 1) * 10; // 10〜90
-                        return { text: `100 － ${minusX} ＝`, ans: 100 - minusX };
-                    }
+
+                approach100History.push(text);
+                if (approach100History.length > 2) {
+                    approach100History.shift();
                 }
-                if (level === "3") {
-                    if (Math.random() < 0.5) { // 100 － 二桁
-                        let minus = Math.floor(Math.random() * 89) + 10; // 10〜98
-                        return { text: `100 － ${minus} ＝`, ans: 100 - minus };
-                    } else { // 二桁 ＋ 二桁 ＝ 100
-                        let plusX = Math.floor(Math.random() * 80) + 11; // 11〜91
-                        let plusY = 100 - plusX;
-                        return { text: `${plusX} ＋ ${plusY} ＝`, ans: 100 };
-                    }
-                }
-                if (level === "4") {
-                    if (Math.random() < 0.5) { // 何十 ＋ 何十 ＋ 何十 ＝ 100
-                        let x = (Math.floor(Math.random() * 6) + 1) * 10; // 10〜60
-                        let y = (Math.floor(Math.random() * ((100 - x) / 10 - 1)) + 1) * 10;
-                        let z = 100 - x - y;
-                        return { text: `${x} ＋ ${y} ＋ ${z} ＝`, ans: 100 };
-                    } else { // 100 － 何十 － 一桁
-                        let x = (Math.floor(Math.random() * 7) + 1) * 10; // 10〜70
-                        let y = Math.floor(Math.random() * 9) + 1; // 1〜9
-                        return { text: `100 － ${x} － ${y} ＝`, ans: 100 - x - y };
-                    }
-                }
+
+                return { text: text, ans: ans };
             }
 
 
@@ -764,32 +1151,61 @@
             }
 
             if (unit === "かけ算九九") {
-                if (level === "1") { 
-                    // 基礎：2, 3, 4, 5の段
-                    let b = Math.floor(Math.random() * 9) + 1;
-                    const easySteps = [2, 3, 4, 5];
-                    let a = easySteps[Math.floor(Math.random() * easySteps.length)];
-                    return { text: `${a} × ${b} ＝`, ans: a * b };
+                if (level === "1") {
+                    // かけ算九九の基本（2〜5の段・かける数2〜9に制限し、1の混入と直前重複を完全に防止）
+                    let a, b, currentQ;
+                    let attempts = 0;
+                    
+                    do {
+                        a = Math.floor(Math.random() * 4) + 2; // 2〜5の段（1の段を除外）
+                        b = Math.floor(Math.random() * 8) + 2; // 2〜9のかける数（1をかける計算を除外）
+                        currentQ = a + "×" + b;
+                    } while (currentQ === sessionStorage.getItem("last_kuku_q") && attempts++ < 20);
+
+                    // 今回の問題を記憶
+                    sessionStorage.setItem("last_kuku_q", currentQ);
+                    
+                    const ans = a * b;
+                    return { text: a + " × " + b + " ＝ ", ans: String(ans) };
                 }
-                if (level === "2") { 
-                    // 応用：6, 7, 8, 9の段
-                    let b = Math.floor(Math.random() * 9) + 1;
-                    const hardSteps = [6, 7, 8, 9];
-                    let a = hardSteps[Math.floor(Math.random() * hardSteps.length)];
-                    return { text: `${a} × ${b} ＝`, ans: a * b };
+                if (level === "2") {
+                    // かけ算九九の基本（6〜9の段、直前問題との連続重複を完全に防止）
+                    let a, b, currentQ;
+                    let attempts = 0;
+                    
+                    do {
+                        a = Math.floor(Math.random() * 4) + 6; // 6〜9の段
+                        b = Math.floor(Math.random() * 9) + 1; // 1〜9のかける数
+                        currentQ = a + "×" + b;
+                    } while (currentQ === sessionStorage.getItem("last_kuku_q") && attempts++ < 20);
+
+                    // 今回の問題を記憶
+                    sessionStorage.setItem("last_kuku_q", currentQ);
+                    
+                    const ans = a * b;
+                    return { text: a + " × " + b + " ＝ ", ans: String(ans) };
                 }
-                if (level === "3") { 
-                    // 【改良】虫食い算：1の段を完全排除、わり算接続のために6〜9の段の出現確率を大幅底上げ
-                    let dan = Math.floor(Math.random() * 8) + 2; // 2〜9の段（1の段カット）
-                    let num = Math.floor(Math.random() * 9) + 1;  // 1〜9
-                    if (Math.random() < 0.4) { 
-                        dan = Math.floor(Math.random() * 4) + 6; // 40%の確率でさらに6, 7, 8, 9の段に偏らせる
-                    }
-                    let prod = dan * num;
-                    if (Math.random() < 0.5) {
-                        return { text: `${dan} × □ ＝ ${prod}`, ans: num };
+                if (level === "3") {
+                    // 発展：かけ算の虫食い□（1の段・1をかける計算をカット、□をランダム配置、直前重複防止）
+                    let a, b, currentQ;
+                    let attempts = 0;
+                    
+                    do {
+                        a = Math.floor(Math.random() * 8) + 2; // 2〜9の段（1の段を除外）
+                        b = Math.floor(Math.random() * 8) + 2; // 2〜9のかける数（1を除外）
+                        currentQ = a + "×" + b;
+                    } while (currentQ === sessionStorage.getItem("last_kuku_q") && attempts++ < 20);
+
+                    // 今回の問題を記憶
+                    sessionStorage.setItem("last_kuku_q", currentQ);
+                    
+                    const ans = a * b;
+                    const position = Math.floor(Math.random() * 2); // 0: 1項目目(かけられる数), 1: 2項目目(かける数)
+
+                    if (position === 0) {
+                        return { text: "□ × " + b + " ＝ " + ans, ans: String(a) };
                     } else {
-                        return { text: `□ × ${num} ＝ ${prod}`, ans: dan };
+                        return { text: a + " × □ ＝ " + ans, ans: String(b) };
                     }
                 }
                 if (level === "4") { 
@@ -801,41 +1217,157 @@
             }
 
             if (unit === "簡単な3桁の計算") {
-                if (level === "1") { 
-                    // 基礎：何百の計算（300＋400、800－200など）
-                    let n1 = (Math.floor(Math.random() * 4) + 1) * 100; // 100〜400
-                    let n2 = (Math.floor(Math.random() * 4) + 1) * 100; // 100〜400
-                    if (Math.random() > 0.5) {
-                        return { text: `${n1} ＋ ${n2} ＝`, ans: n1 + n2 };
+                if (level === "1") {
+                    // 簡単な3桁の計算：何百の計算（十の位・一の位はすべて0に固定、加減のバリエーション化）
+                    const type = Math.random() < 0.5 ? "add" : "sub";
+
+                    if (type === "add") {
+                        // 足して900以下になる何百＋何百の組み合わせ
+                        const aVal = Math.floor(Math.random() * 8) + 1; // 1〜8 (100〜800)
+                        const bVal = Math.floor(Math.random() * (9 - aVal)) + 1; // 足して9以下になる範囲
+                        
+                        const a = aVal * 100;
+                        const b = bVal * 100;
+                        const ans = a + b;
+
+                        return { text: a + " ＋ " + b + " ＝ ", ans: String(ans) };
                     } else {
-                        let max = Math.max(n1, n2); let min = Math.min(n1, n2);
-                        return { text: `${max + 100} － ${min} ＝`, ans: (max + 100) - min };
+                        // 引いても100以上残る何百－何百の組み合わせ
+                        const aVal = Math.floor(Math.random() * 8) + 2; // 2〜9 (200〜900)
+                        const bVal = Math.floor(Math.random() * (aVal - 1)) + 1; // 1〜(aVal-1)
+                        
+                        const a = aVal * 100;
+                        const b = bVal * 100;
+                        const ans = a - b;
+
+                        return { text: a + " － " + b + " ＝ ", ans: String(ans) };
                     }
                 }
-                if (level === "2") { 
-                    // 応用：3桁±1桁・2桁（繰り上がり・下がりがマイルドなもの）
-                    let base = (Math.floor(Math.random() * 8) + 1) * 100; // 100〜800
-                    if (Math.random() > 0.5) {
-                        let b = Math.floor(Math.random() * 89) + 10; // 10〜99
-                        return { text: `${base} ＋ ${b} ＝`, ans: base + b };
+                if (level === "2") {
+                    // 応用：3桁±1桁・2桁（繰り上がり・下がりのバリエーションをさらに拡張し単調さを排除）
+                    const type = Math.random() < 0.5 ? "add" : "sub";
+
+                    if (type === "add") {
+                        const addPattern = Math.random() < 0.5;
+                        if (addPattern) {
+                            // パターンA：何百 ＋ 2桁（例：600 ＋ 45 ＝ 645）
+                            const h = (Math.floor(Math.random() * 8) + 1) * 100; // 100〜800
+                            const ten = Math.floor(Math.random() * 89) + 10;     // 10〜98
+                            const ans = h + ten;
+
+                            return { text: h + " ＋ " + ten + " ＝ ", ans: String(ans) };
+                        } else {
+                            // パターンB：3桁 ＋ 1桁の【繰り上がりあり】（例：245 ＋ 7 ＝ 252、198 ＋ 5 ＝ 203）
+                            const base = Math.floor(Math.random() * 790) + 105; // 105〜894
+                            const a = Math.floor(base / 10) * 10 + (Math.floor(Math.random() * 5) + 5); 
+                            const b = Math.floor(Math.random() * 8) + 2; // 2〜9
+                            const ans = a + b;
+
+                            return { text: a + " ＋ " + b + " ＝ ", ans: String(ans) };
+                        }
                     } else {
-                        let a = base + Math.floor(Math.random() * 50) + 40;
-                        let b = Math.floor(Math.random() * 30) + 10;
-                        return { text: `${a} － ${b} ＝`, ans: a - b };
+                        const subPattern = Math.random() < 0.5;
+                        if (subPattern) {
+                            // パターンA：3桁 － 2桁（下2桁を引くパターンと、十・一の位が残るマイルドな引き算をミックス）
+                            const mixPattern = Math.random() < 0.5;
+                            const h = (Math.floor(Math.random() * 8) + 1) * 100; // 100〜800
+                            const tenVal = Math.floor(Math.random() * 80) + 10;   // 10〜89
+                            
+                            if (mixPattern) {
+                                // ぴったり何百にする（例：645 － 45 ＝ 600）
+                                const a = h + tenVal;
+                                return { text: a + " － " + tenVal + " ＝ ", ans: String(h) };
+                            } else {
+                                // 十の位・一の位が残る（繰り下がりなし、例：548 － 23 ＝ 525）
+                                const subTen = Math.floor(Math.random() * (Math.floor(tenVal / 10) - 1)) + 1; // 元の十の位より小さく
+                                const subOne = Math.floor(Math.random() * (tenVal % 10));                     // 元の一の位より小さく
+                                const subNum = subTen * 10 + subOne;
+                                
+                                // 安全な値を保証（引き算する数が10以上の場合のみ採用）
+                                if (subNum >= 10) {
+                                    const a = h + tenVal;
+                                    return { text: a + " － " + subNum + " ＝ ", ans: String(a - subNum) };
+                                } else {
+                                    const a = h + tenVal;
+                                    return { text: a + " － " + tenVal + " ＝ ", ans: String(h) };
+                                }
+                            }
+                        } else {
+                            // パターンB：3桁 － 1桁の【繰り下がりあり】（例：252 － 7 ＝ 245、303 － 5 ＝ 298）
+                            const base = Math.floor(Math.random() * 790) + 110; // 110〜899
+                            const a = Math.floor(base / 10) * 10 + Math.floor(Math.random() * 5); 
+                            const b = Math.floor(Math.random() * 5) + 5; // 5〜9
+                            const ans = a - b;
+
+                            return { text: a + " － " + b + " ＝ ", ans: String(ans) };
+                        }
                     }
                 }
-                if (level === "3") { 
-                    // 虫食い算
-                    let a = (Math.floor(Math.random() * 5) + 1) * 100; // 100〜500
-                    let hidden = Math.floor(Math.random() * 89) + 10;
-                    return { text: `${a} ＋ □ ＝ ${a + hidden}`, ans: hidden };
+                if (level === "3") {
+                    // 簡単な3桁の計算（適正化）：何百の虫食い算（十の位・一の位はすべて0に固定、＝の後や記号は除外）
+                    const type = Math.random() < 0.5 ? "add" : "sub";
+                    const position = Math.floor(Math.random() * 2); // 0: 1項目目, 1: 2項目目
+
+                    if (type === "add") {
+                        // 足して900以下になる何百の組み合わせ
+                        const aVal = Math.floor(Math.random() * 7) + 1; // 100〜700
+                        const bVal = Math.floor(Math.random() * (8 - aVal)) + 1; // 100〜
+                        const a = aVal * 100;
+                        const b = bVal * 100;
+                        const ans = a + b;
+
+                        if (position === 0) {
+                            return { text: "□ ＋ " + b + " ＝ " + ans, ans: String(a) };
+                        } else {
+                            return { text: a + " ＋ □ ＝ " + ans, ans: String(b) };
+                        }
+                    } else {
+                        // 引いても100以上残る何百の組み合わせ
+                        const aVal = Math.floor(Math.random() * 8) + 2; // 200〜900
+                        const bVal = Math.floor(Math.random() * (aVal - 1)) + 1;
+                        const a = aVal * 100;
+                        const b = bVal * 100;
+                        const ans = a - b;
+
+                        if (position === 0) {
+                            return { text: "□ － " + b + " ＝ " + a, ans: String(ans) }; // □ - b = 答え から □(a)を求める
+                        } else {
+                            return { text: a + " － □ ＝ " + ans, ans: String(b) };
+                        }
+                    }
                 }
-                if (level === "4") { 
-                    // 発展：3桁の四則混合（九九と3桁の足し引きの融合など）
-                    let a = (Math.floor(Math.random() * 5) + 2) * 100; // 200〜600
-                    let b = Math.floor(Math.random() * 8) + 2;
-                    let c = Math.floor(Math.random() * 8) + 2;
-                    return { text: `${a} － ${b} × ${c} ＝`, ans: a - (b * c) };
+                if (level === "4") {
+                    // 3桁と九九の四則混合（適正化：3桁は必ず「何百」に固定し、2年生が暗算できる難易度へ調整）
+                    const pattern = Math.floor(Math.random() * 3); // 3つのパターンでバリエーション化
+
+                    if (pattern === 0) {
+                        // パターン0：(九九) ＋ 何百（左から順に計算できる構造）
+                        const k1 = Math.floor(Math.random() * 8) + 2; // 2〜9
+                        const k2 = Math.floor(Math.random() * 8) + 2; // 2〜9
+                        const base = k1 * k2;
+                        const threeDigit = (Math.floor(Math.random() * 8) + 1) * 100; // 100〜800の「何百」
+                        const ans = base + threeDigit;
+
+                        return { text: k1 + " × " + k2 + " ＋ " + threeDigit + " ＝ ", ans: String(ans) };
+                    } else if (pattern === 1) {
+                        // パターン1：何百 ＋ (九九)（（ ）をつけて2年生向けに配慮）
+                        const threeDigit = (Math.floor(Math.random() * 8) + 1) * 100; // 100〜800の「何百」
+                        const k1 = Math.floor(Math.random() * 8) + 2;
+                        const k2 = Math.floor(Math.random() * 8) + 2;
+                        const base = k1 * k2;
+                        const ans = threeDigit + base;
+
+                        return { text: threeDigit + " ＋ （" + k1 + " × " + k2 + "） ＝ ", ans: String(ans) };
+                    } else {
+                        // パターン2：何百 － (九九)（（ ）をつけて2年生向けに配慮、マイナスにならない制御）
+                        const threeDigit = (Math.floor(Math.random() * 8) + 2) * 100; // 引いても安心な200〜900の「何百」
+                        const k1 = Math.floor(Math.random() * 8) + 2;
+                        const k2 = Math.floor(Math.random() * 8) + 2;
+                        const base = k1 * k2;
+                        const ans = threeDigit - base;
+
+                        return { text: threeDigit + " － （" + k1 + " × " + k2 + "） ＝ ", ans: String(ans) };
+                    }
                 }
             }
 
